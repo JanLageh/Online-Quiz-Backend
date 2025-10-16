@@ -24,6 +24,22 @@ namespace OnlineQuiz.Models
         [StringLength(100)]
         public string Department { get; set; } = string.Empty;
 
+        [Required]
+        [StringLength(50)]
+        public string Status { get; set; } = "Active";
+
+        [StringLength(50)]
+        public string? Section { get; set; }
+
+        [Required]
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        [Required]
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        [Required]
+        public long CreatedBy { get; set; }
+
         // Navigation properties
         [ForeignKey("InstructorUserId")]
         public virtual TeacherModel Instructor { get; set; } = null!;

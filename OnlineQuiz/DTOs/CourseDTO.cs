@@ -16,6 +16,8 @@ namespace OnlineQuiz.DTOs
 
         public string Department { get; set; } = string.Empty;
 
+
+
         [Required]
         [Column("Instructor_UserId")]
         public long InstructorUserId { get; set; }
@@ -64,6 +66,11 @@ namespace OnlineQuiz.DTOs
             public string Department { get; set; }
             public long InstructorUserId { get; set; }
             public string? InstructorName { get; set; }
+            public string Status { get; set; } = string.Empty;
+            public string? Section { get; set; }
+            public DateTime CreatedAt { get; set; }
+            public DateTime UpdatedAt { get; set; }
+            public long CreatedBy { get; set; }
 
             public int EnrollmentCount { get; set; }
             public int QuizCount { get; set; }

@@ -23,30 +23,30 @@ namespace OnlineQuiz.Mappings
 
 
             CreateMap<CourseModel, CourseDTO.CourseDto>()
-        .ForMember(dest => dest.InstructorName,
-            opt => opt.MapFrom(src =>
-                src.Instructor != null && src.Instructor.User != null
-                    ? src.Instructor.User.FullName
-                    : "N/A"))
-         .ForMember(dest => dest.Department,
-        opt => opt.MapFrom(src => src.Department)) 
-        .ForMember(dest => dest.EnrollmentCount,
-            opt => opt.MapFrom(src => src.Enrollments.Count))
-        .ForMember(dest => dest.QuizCount,
-            opt => opt.MapFrom(src => src.Quizzes.Count))
-        .ForMember(dest => dest.EnrolledStudents,
-            opt => opt.MapFrom(src => src.Enrollments));
+                 .ForMember(dest => dest.InstructorName,
+                  opt => opt.MapFrom(src =>
+                  src.Instructor != null && src.Instructor.User != null
+                 ? src.Instructor.User.FullName
+                 : "N/A"))
+             .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status))
+             .ForMember(dest => dest.Department, opt => opt.MapFrom(src => src.Department))
+             .ForMember(dest => dest.Section, opt => opt.MapFrom(src => src.Section))
+             .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(src => src.CreatedAt))
+             .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(src => src.UpdatedAt))
+             .ForMember(dest => dest.CreatedBy, opt => opt.MapFrom(src => src.CreatedBy))
+             .ForMember(dest => dest.EnrollmentCount, opt => opt.MapFrom(src => src.Enrollments.Count))
+             .ForMember(dest => dest.QuizCount, opt => opt.MapFrom(src => src.Quizzes.Count))
+             .ForMember(dest => dest.EnrolledStudents, opt => opt.MapFrom(src => src.Enrollments));
+
 
             CreateMap<CourseDTO.CreateCourseDto, CourseModel>()
-                .ForMember(dest => dest.CourseId, opt => opt.Ignore())
-                .ForMember(dest => dest.Instructor, opt => opt.Ignore());
+                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(src => DateTime.UtcNow))
+                .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(src => DateTime.UtcNow))
+                .ForMember(dest => dest.Status, opt => opt.MapFrom(src => "Active"));
 
             CreateMap<CourseDTO.UpdateCourseDto, CourseModel>()
-                .ForMember(dest => dest.CourseId, opt => opt.Ignore())
-                .ForMember(dest => dest.Instructor, opt => opt.Ignore())
-                .ForAllMembers(opt =>
-                    opt.Condition((src, dest, srcMember) =>
-                        srcMember != null && !string.IsNullOrEmpty(srcMember?.ToString())));
+                .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(src => DateTime.UtcNow))
+                .ForAllMembers(opt => opt.Condition((src, dest, srcMember) => srcMember != null));
 
             // Teacher mappings
             CreateMap<TeacherModel, TeacherDto>();
