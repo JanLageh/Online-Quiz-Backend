@@ -14,8 +14,8 @@ namespace OnlineQuiz.Services
             _repo = repo;
         }
 
-        public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync() =>
-            await _repo.GetAllCoursesAsync();
+        public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync(long? instructorId = null, string? department = null) =>
+        await _repo.GetAllCoursesAsync(instructorId, department);
 
         public async Task<ServiceResponse<CourseDTO.CourseDto>> GetCourseByIdAsync(long id) =>
             await _repo.GetCourseByIdAsync(id);

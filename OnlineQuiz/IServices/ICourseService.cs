@@ -5,7 +5,7 @@ namespace OnlineQuiz.IServices
 {
     public interface ICourseService
     {
-        Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync();
+        Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync(long? instructorId = null, string? department = null);
         Task<ServiceResponse<CourseDTO.CourseDto>> GetCourseByIdAsync(long id);
         Task<ServiceResponse<CourseDTO.CourseDto>> CreateCourseAsync(CourseDTO.CreateCourseDto dto);
         Task<ServiceResponse<CourseDTO.CourseDto>> UpdateCourseAsync(long id, CourseDTO.UpdateCourseDto dto);

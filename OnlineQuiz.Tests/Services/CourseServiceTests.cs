@@ -28,7 +28,7 @@ namespace OnlineQuiz.Tests.Services
                 new CourseDTO.CourseDto { CourseId = 2, Code = "CS102", Name = "Data Structures", InstructorUserId = 11 }
             };
             var expectedResponse = new ServiceResponse<IEnumerable<CourseDTO.CourseDto>>(courses);
-            mockRepo.Setup(r => r.GetAllCoursesAsync()).ReturnsAsync(expectedResponse);
+            mockRepo.Setup(r => r.GetAllCoursesAsync(null, null));
 
             var service = CreateService(mockRepo);
 

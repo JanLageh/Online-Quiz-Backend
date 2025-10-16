@@ -18,8 +18,11 @@ namespace OnlineQuiz.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll() =>
-            Ok(await _service.GetAllCoursesAsync());
+        public async Task<IActionResult> GetAll([FromQuery] long? instructorId, [FromQuery] string? department)
+        {
+            var result = await _service.GetAllCoursesAsync(instructorId, department);
+            return Ok(result);
+        }
 
         [HttpGet("{id:long}")]
         public async Task<IActionResult> GetById([FromRoute] long id) =>

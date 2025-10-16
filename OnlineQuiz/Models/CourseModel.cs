@@ -19,7 +19,11 @@ namespace OnlineQuiz.Models
         [Required]
         [Column("Instructor_UserId")]
         public long InstructorUserId { get; set; }
-        
+
+        [Required]
+        [StringLength(100)]
+        public string Department { get; set; } = string.Empty;
+
         // Navigation properties
         [ForeignKey("InstructorUserId")]
         public virtual TeacherModel Instructor { get; set; } = null!;

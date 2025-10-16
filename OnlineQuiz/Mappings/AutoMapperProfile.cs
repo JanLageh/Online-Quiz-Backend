@@ -23,18 +23,24 @@ namespace OnlineQuiz.Mappings
 
 
             CreateMap<CourseModel, CourseDTO.CourseDto>()
-                .ForMember(dest => dest.InstructorName,
-                    opt => opt.MapFrom(src =>
-                        src.Instructor != null && src.Instructor.User != null
-                            ? src.Instructor.User.FullName
-                            : "N/A"));
+        .ForMember(dest => dest.InstructorName,
+            opt => opt.MapFrom(src =>
+                src.Instructor != null && src.Instructor.User != null
+                    ? src.Instructor.User.FullName
+                    : "N/A"))
+         .ForMember(dest => dest.Department,
+        opt => opt.MapFrom(src => src.Department)) 
+        .ForMember(dest => dest.EnrollmentCount,
+            opt => opt.MapFrom(src => src.Enrollments.Count))
+        .ForMember(dest => dest.QuizCount,
+            opt => opt.MapFrom(src => src.Quizzes.Count))
+        .ForMember(dest => dest.EnrolledStudents,
+            opt => opt.MapFrom(src => src.Enrollments));
 
-            // Create DTO → Entity
             CreateMap<CourseDTO.CreateCourseDto, CourseModel>()
                 .ForMember(dest => dest.CourseId, opt => opt.Ignore())
                 .ForMember(dest => dest.Instructor, opt => opt.Ignore());
 
-            // Update DTO → Entity
             CreateMap<CourseDTO.UpdateCourseDto, CourseModel>()
                 .ForMember(dest => dest.CourseId, opt => opt.Ignore())
                 .ForMember(dest => dest.Instructor, opt => opt.Ignore())
