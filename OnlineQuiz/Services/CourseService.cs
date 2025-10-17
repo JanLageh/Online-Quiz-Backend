@@ -9,15 +9,16 @@ namespace OnlineQuiz.Services
     public class CourseService : ICourseService
     {
         private readonly ICourseRepository _repo;
-        private readonly IMapper _mapper;
-        public CourseService(ICourseRepository repo, IMapper mapper)
+        private readonly IMapper? _mapper;
+
+        public CourseService(ICourseRepository repo, IMapper? mapper = null)
         {
             _repo = repo;
             _mapper = mapper;
         }
 
-        public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync(long? instructorId = null, string? department = null) =>
-        await _repo.GetAllCoursesAsync(instructorId, department);
+        public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync() =>
+        await _repo.GetAllCoursesAsync();
 
         public async Task<ServiceResponse<CourseDTO.CourseDto>> GetCourseByIdAsync(long id) =>
             await _repo.GetCourseByIdAsync(id);
@@ -73,5 +74,22 @@ namespace OnlineQuiz.Services
 
         public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetCoursesByTeacherAsync(long teacherId) =>
             await _repo.GetCoursesByTeacherAsync(teacherId);
+
+        public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync(long? instructorId = null, string? department = null)
+        {
+            var result = await _repo.GetAllCoursesAsync(instructorId, department);
+
+            if (_mapper != null)
+            {
+                return new ServiceResponse<IEnumerable<CourseDTO.CourseDto>>
+                {
+                    Success = result.Success,
+                    Message = result.Message,
+                    Data = _mapper.Map<IEnumerable<CourseDTO.CourseDto>>(result.Data)
+                };
+            }
+
+            return result;
+        }
     }
 }

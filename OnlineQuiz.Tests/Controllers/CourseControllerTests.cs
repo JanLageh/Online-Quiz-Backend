@@ -31,13 +31,12 @@ namespace OnlineQuiz.Tests.Controllers
                 new CourseDTO.CourseDto { CourseId = 2, Code = "CS102", Name = "Data Structures", InstructorUserId = 11, InstructorName = "Prof. B" }
             };
             var expectedResponse = new ServiceResponse<IEnumerable<CourseDTO.CourseDto>>(expectedCourses);
-            mockService.Setup(s => s.GetAllCoursesAsync(null, null))
-           .ReturnsAsync(expectedResponse);
+            mockService.Setup(s => s.GetAllCoursesAsync()).ReturnsAsync(expectedResponse);
 
             var controller = CreateController(mockService);
 
             // Act
-            var result = await controller.GetAll(null, null);
+            var result = await controller.GetAll();
 
             // Assert
             var ok = Assert.IsType<OkObjectResult>(result);

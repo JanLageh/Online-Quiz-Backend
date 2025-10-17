@@ -17,6 +17,9 @@ namespace OnlineQuiz.Controllers
         {
             _service = service;
         }
+        [HttpGet]
+        [NonAction]
+        public Task<IActionResult> GetAll() => GetAll(null, null);
 
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] long? instructorId, [FromQuery] string? department)
