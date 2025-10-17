@@ -19,6 +19,12 @@ namespace OnlineQuiz.Repository
             _mapper = mapper;
         }
 
+        public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync()
+        {
+            return await GetAllCoursesAsync(null, null);
+        }
+
+        // Existing method with optional parameters
         public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync(
             long? instructorId = null, string? department = null)
         {

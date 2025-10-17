@@ -6,7 +6,12 @@ namespace OnlineQuiz.IRepository
 {
     public interface ICourseRepository
     {
-        Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync(long? instructorId = null, string? department = null);
+        // Overload without optional parameters — for tests and expression tree safety
+        Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync();
+
+        // Main version — used by real code
+        Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync(long? instructorId, string? department);
+
         Task<ServiceResponse<CourseDTO.CourseDto>> GetCourseByIdAsync(long id);
         Task<ServiceResponse<CourseDTO.CourseDto>> CreateCourseAsync(CourseDTO.CreateCourseDto dto);
         Task<ServiceResponse<CourseDTO.CourseDto>> UpdateCourseAsync(long id, CourseDTO.UpdateCourseDto dto);
@@ -18,6 +23,5 @@ namespace OnlineQuiz.IRepository
         Task<ServiceResponse<bool>> UnenrollStudentAsync(long courseId, long userId);
         Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetCoursesByStudentAsync(long studentId);
         Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetCoursesByTeacherAsync(long teacherId);
-
     }
 }
