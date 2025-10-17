@@ -1,10 +1,11 @@
-﻿using OnlineQuiz.DTOs;
-using OnlineQuiz.IServices;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
+using OnlineQuiz.DTOs;
+using OnlineQuiz.IServices;
+using OnlineQuiz.Services;
 
 namespace OnlineQuiz.Controllers
-{   
+{
     [Authorize]
     [Route("api/[controller]")]
     [ApiController]
@@ -16,10 +17,16 @@ namespace OnlineQuiz.Controllers
         {
             _service = service;
         }
+        [HttpGet]
+        [NonAction]
+        public Task<IActionResult> GetAll() => GetAll(null, null);
 
         [HttpGet]
-        public async Task<IActionResult> GetAll() =>
-            Ok(await _service.GetAllCoursesAsync());
+        public async Task<IActionResult> GetAll([FromQuery] long? instructorId, [FromQuery] string? department)
+        {
+            var result = await _service.GetAllCoursesAsync(instructorId, department);
+            return Ok(result);
+        }
 
         [HttpGet("{id:long}")]
         public async Task<IActionResult> GetById([FromRoute] long id) =>
@@ -36,5 +43,53 @@ namespace OnlineQuiz.Controllers
         [HttpDelete("{id:long}")]
         public async Task<IActionResult> Delete([FromRoute] long id) =>
             Ok(await _service.DeleteCourseAsync(id));
+
+        [HttpGet("{courseId:long}/students")]
+        public async Task<IActionResult> GetEnrolledStudents(long courseId)
+        {
+            var response = await _service.GetEnrolledStudentsAsync(courseId);
+            return Ok(response);
+        }
+
+        [HttpGet("{courseId:long}/unenrolled-students")]
+        public async Task<IActionResult> GetUnenrolledStudents(long courseId)
+        {
+            var response = await _service.GetUnenrolledStudentsAsync(courseId);
+            return Ok(response);
+        }
+
+        [HttpGet("{courseId:long}/teacher")]
+        public async Task<IActionResult> GetAssignedTeacher(long courseId)
+        {
+            var response = await _service.GetAssignedTeacherAsync(courseId);
+            return Ok(response);
+        }
+
+        [HttpPost("{courseId:long}/enroll/{userId:long}")]
+        public async Task<IActionResult> EnrollStudent(long courseId, long userId)
+        {
+            var response = await _service.EnrollStudentAsync(courseId, userId);
+            return Ok(response);
+        }
+
+        [HttpDelete("{courseId:long}/unenroll/{userId:long}")]
+        public async Task<IActionResult> UnenrollStudent(long courseId, long userId)
+        {
+            var response = await _service.UnenrollStudentAsync(courseId, userId);
+            return Ok(response);
+        }
+        [HttpGet("student/{studentId:long}/courses")]
+        public async Task<IActionResult> GetCoursesByStudent(long studentId)
+        {
+            var response = await _service.GetCoursesByStudentAsync(studentId);
+            return Ok(response);
+        }
+
+        [HttpGet("teacher/{teacherId:long}/courses")]
+        public async Task<IActionResult> GetCoursesByTeacher(long teacherId)
+        {
+            var response = await _service.GetCoursesByTeacherAsync(teacherId);
+            return Ok(response);
+        }
     }
 }
