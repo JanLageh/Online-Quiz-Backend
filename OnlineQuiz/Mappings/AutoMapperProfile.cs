@@ -38,6 +38,15 @@ namespace OnlineQuiz.Mappings
              .ForMember(dest => dest.QuizCount, opt => opt.MapFrom(src => src.Quizzes.Count))
              .ForMember(dest => dest.EnrolledStudents, opt => opt.MapFrom(src => src.Enrollments));
 
+            CreateMap<CourseDTO.CreateCourseDto, CourseModel>()
+              .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(src => DateTime.UtcNow))
+              .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(src => DateTime.UtcNow))
+              .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status ?? "Active"))
+              .ForMember(dest => dest.Department, opt => opt.MapFrom(src => src.Department))
+              .ForMember(dest => dest.Section, opt => opt.MapFrom(src => src.Section))
+              .ForMember(dest => dest.CreatedBy, opt => opt.MapFrom(src => src.CreatedBy));
+
+
 
             CreateMap<CourseDTO.CreateCourseDto, CourseModel>()
                 .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(src => DateTime.UtcNow))

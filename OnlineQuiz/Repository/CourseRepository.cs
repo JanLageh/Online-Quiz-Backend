@@ -172,6 +172,106 @@ namespace OnlineQuiz.Repository
             return response;
         }
 
+        public async Task<ServiceResponse<IEnumerable<UserDto>>> GetEnrolledStudentsAsync(long courseId)
+        {
+            var response = new ServiceResponse<IEnumerable<UserDto>>();
+
+            try
+            {
+                var enrolledUsers = await _context.Enrollments
+                    .Where(e => e.CourseId == courseId)
+                    .Include(e => e.User)
+                    .Select(e => new UserDto
+                    {
+                        UserId = e.User.UserId,
+                        FullName = e.User.FullName,
+                        Email = e.User.Email,
+                        Status = e.User.Status
+                    })
+                    .ToListAsync();
+
+                response.Data = enrolledUsers;
+                response.Message = "Enrolled students retrieved successfully.";
+            }
+            catch (Exception ex)
+            {
+                response.Success = false;
+                response.Message = $"Error retrieving enrolled students: {ex.Message}";
+            }
+
+            return response;
+        }
+
+        public async Task<ServiceResponse<IEnumerable<UserDto>>> GetUnenrolledStudentsAsync(long courseId)
+        {
+            var response = new ServiceResponse<IEnumerable<UserDto>>();
+
+            try
+            {
+                var enrolledIds = await _context.Enrollments
+                    .Where(e => e.CourseId == courseId)
+                    .Select(e => e.UserId)
+                    .ToListAsync();
+
+                var unenrolledUsers = await _context.Users
+                    .Where(u => !enrolledIds.Contains(u.UserId))
+                    .Select(u => new UserDto
+                    {
+                        UserId = u.UserId,
+                        FullName = u.FullName,
+                        Email = u.Email,
+                        Status = u.Status
+                    })
+                    .ToListAsync();
+
+                response.Data = unenrolledUsers;
+                response.Message = "Unenrolled students retrieved successfully.";
+            }
+            catch (Exception ex)
+            {
+                response.Success = false;
+                response.Message = $"Error retrieving unenrolled students: {ex.Message}";
+            }
+
+            return response;
+        }
+
+        public async Task<ServiceResponse<TeacherDto>> GetAssignedTeacherAsync(long courseId)
+        {
+            var response = new ServiceResponse<TeacherDto>();
+
+            try
+            {
+                var teacher = await _context.Courses
+                    .Include(c => c.Instructor)
+                    .ThenInclude(t => t.User)
+                    .Where(c => c.CourseId == courseId)
+                    .Select(c => new TeacherDto
+                    {
+                        UserId = c.Instructor.UserId,
+                        Department = c.Instructor.Department
+                    })
+                    .FirstOrDefaultAsync();
+
+                if (teacher == null)
+                {
+                    response.Success = false;
+                    response.Message = "Assigned teacher not found.";
+                    return response;
+                }
+
+                response.Data = teacher;
+                response.Message = "Assigned teacher retrieved successfully.";
+            }
+            catch (Exception ex)
+            {
+                response.Success = false;
+                response.Message = $"Error retrieving assigned teacher: {ex.Message}";
+            }
+
+            return response;
+        }
+
         public async Task<ServiceResponse<bool>> EnrollStudentAsync(long courseId, long userId)
         {
             var response = new ServiceResponse<bool>();
@@ -197,21 +297,19 @@ namespace OnlineQuiz.Repository
                     return response;
                 }
 
-                bool alreadyEnrolled = course.Enrollments.Any(e => e.UserId == userId);
-                if (alreadyEnrolled)
+                if (course.Enrollments.Any(e => e.UserId == userId))
                 {
                     response.Success = false;
                     response.Message = "User is already enrolled in this course.";
                     return response;
                 }
 
-                var enrollment = new EnrollmentModel
+                _context.Enrollments.Add(new EnrollmentModel
                 {
                     CourseId = courseId,
                     UserId = userId
-                };
+                });
 
-                _context.Enrollments.Add(enrollment);
                 await _context.SaveChangesAsync();
 
                 response.Data = true;
@@ -221,6 +319,85 @@ namespace OnlineQuiz.Repository
             {
                 response.Success = false;
                 response.Message = $"Error enrolling user: {ex.Message}";
+            }
+
+            return response;
+        }
+
+        public async Task<ServiceResponse<bool>> UnenrollStudentAsync(long courseId, long userId)
+        {
+            var response = new ServiceResponse<bool>();
+
+            try
+            {
+                var enrollment = await _context.Enrollments
+                    .FirstOrDefaultAsync(e => e.CourseId == courseId && e.UserId == userId);
+
+                if (enrollment == null)
+                {
+                    response.Success = false;
+                    response.Message = "Enrollment not found.";
+                    return response;
+                }
+
+                _context.Enrollments.Remove(enrollment);
+                await _context.SaveChangesAsync();
+
+                response.Data = true;
+                response.Message = "User unenrolled successfully.";
+            }
+            catch (Exception ex)
+            {
+                response.Success = false;
+                response.Message = $"Error unenrolling user: {ex.Message}";
+            }
+
+            return response;
+        }
+        public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetCoursesByStudentAsync(long studentId)
+        {
+            var response = new ServiceResponse<IEnumerable<CourseDTO.CourseDto>>();
+            try
+            {
+                var courses = await _context.Enrollments
+                    .Where(e => e.UserId == studentId)
+                    .Include(e => e.Course)
+                        .ThenInclude(c => c.Instructor)
+                            .ThenInclude(t => t.User)
+                    .Select(e => e.Course)
+                    .ToListAsync();
+
+                response.Data = _mapper.Map<IEnumerable<CourseDTO.CourseDto>>(courses);
+                response.Message = "Courses enrolled by student retrieved successfully.";
+            }
+            catch (Exception ex)
+            {
+                response.Success = false;
+                response.Message = $"Error retrieving student courses: {ex.Message}";
+            }
+
+            return response;
+        }
+
+        public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetCoursesByTeacherAsync(long teacherId)
+        {
+            var response = new ServiceResponse<IEnumerable<CourseDTO.CourseDto>>();
+            try
+            {
+                var courses = await _context.Courses
+                    .Where(c => c.InstructorUserId == teacherId)
+                    .Include(c => c.Enrollments)
+                        .ThenInclude(e => e.User)
+                    .Include(c => c.Quizzes)
+                    .ToListAsync();
+
+                response.Data = _mapper.Map<IEnumerable<CourseDTO.CourseDto>>(courses);
+                response.Message = "Courses taught by teacher retrieved successfully.";
+            }
+            catch (Exception ex)
+            {
+                response.Success = false;
+                response.Message = $"Error retrieving teacher courses: {ex.Message}";
             }
 
             return response;

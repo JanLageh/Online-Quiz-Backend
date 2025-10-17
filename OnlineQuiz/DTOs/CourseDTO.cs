@@ -39,9 +39,14 @@ namespace OnlineQuiz.DTOs
             [Required]
             [StringLength(100)]
             public string Department { get; set; } = string.Empty;
-
             [Required]
             public long InstructorUserId { get; set; }
+            [Required]
+            public string Status { get; set; } = "Active";
+            [Required]
+            public string Section { get; set; }
+            [Required]
+            public int CreatedBy { get; set; }
         }
 
         public class UpdateCourseDto
