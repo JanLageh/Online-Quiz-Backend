@@ -17,7 +17,7 @@ namespace OnlineQuiz.Services
             _mapper = mapper;
         }
 
-        // ✅ Overload used by tests
+        //Overload used by tests
         public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync()
         {
             // Explicitly call the repo with nulls — no optional args
@@ -35,8 +35,6 @@ namespace OnlineQuiz.Services
 
             return result;
         }
-
-        // ✅ Main version used by controller (no optional args)
         public async Task<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>> GetAllCoursesAsync(long? instructorId, string? department)
         {
             var result = await _repo.GetAllCoursesAsync(instructorId, department);

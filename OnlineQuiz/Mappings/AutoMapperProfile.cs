@@ -43,7 +43,7 @@ namespace OnlineQuiz.Mappings
                         ? src.Instructor.User.FullName
                         : "N/A"))
                 .ForMember(dest => dest.EnrolledStudents, opt => opt.MapFrom(src =>
-                    src.Enrollments.Select(e => e.User))) // Users mapped via the mapping above
+                    src.Enrollments.Select(e => e.User))) 
                 .ForMember(dest => dest.EnrollmentCount, opt => opt.MapFrom(src => src.Enrollments.Count))
                 .ForMember(dest => dest.QuizCount, opt => opt.MapFrom(src => src.Quizzes.Count))
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status))
