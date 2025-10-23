@@ -19,12 +19,13 @@ namespace OnlineQuiz.Repository
             _mapper = mapper;
         }
 
-        //GET /api/quizzes — filter + pagination + stats
+        // =============================
+        // QUIZ CRUD
+        // =============================
         public async Task<ServiceResponse<QuizDTO.PagedResult<QuizDTO.QuizListItemDto>>> GetPagedQuizzesAsync(
             int page = 1, int pageSize = 10, long? courseId = null, long? teacherId = null)
         {
             var response = new ServiceResponse<QuizDTO.PagedResult<QuizDTO.QuizListItemDto>>();
-
             try
             {
                 var query = _context.Quizzes
@@ -54,10 +55,10 @@ namespace OnlineQuiz.Repository
                     TeacherName = q.Course.Instructor.User.FullName,
                     TotalAttempts = q.Attempts.Count,
                     AverageScore = q.Attempts.Any() ? (double)q.Attempts.Average(a => a.Score) : 0,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = q.CreatedAt
                 }).ToList();
 
-                var paged = new QuizDTO.PagedResult<QuizDTO.QuizListItemDto>
+                response.Data = new QuizDTO.PagedResult<QuizDTO.QuizListItemDto>
                 {
                     CurrentPage = page,
                     PageSize = pageSize,
@@ -65,8 +66,6 @@ namespace OnlineQuiz.Repository
                     TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize),
                     Items = quizDtos
                 };
-
-                response.Data = paged;
                 response.Message = "Quizzes retrieved successfully.";
             }
             catch (Exception ex)
@@ -78,7 +77,6 @@ namespace OnlineQuiz.Repository
             return response;
         }
 
-        //GET /api/quizzes/{id}
         public async Task<ServiceResponse<QuizDTO.QuizDetailDto>> GetQuizByIdAsync(long quizId)
         {
             var response = new ServiceResponse<QuizDTO.QuizDetailDto>();
@@ -96,69 +94,57 @@ namespace OnlineQuiz.Repository
                 return response;
             }
 
-            var dto = _mapper.Map<QuizDTO.QuizDetailDto>(quiz);
-            dto.CourseName = quiz.Course.Name;
-            dto.TeacherName = quiz.Course.Instructor.User.FullName;
-            dto.TotalAttempts = quiz.Attempts.Count;
-            dto.AverageScore = quiz.Attempts.Any() ? (double)quiz.Attempts.Average(a => a.Score) : 0;
-
-            response.Data = dto;
+            response.Data = _mapper.Map<QuizDTO.QuizDetailDto>(quiz);
             response.Message = "Quiz details retrieved successfully.";
             return response;
         }
 
-        //POST /api/quizzes
         public async Task<ServiceResponse<QuizDTO.QuizListItemDto>> CreateQuizAsync(QuizDTO.CreateQuizDto dto, long createdByUserId)
         {
             var response = new ServiceResponse<QuizDTO.QuizListItemDto>();
 
-            try
-            {
-                var course = await _context.Courses.Include(c => c.Instructor)
-                    .FirstOrDefaultAsync(c => c.CourseId == dto.CourseId);
+            var course = await _context.Courses.Include(c => c.Instructor)
+                .FirstOrDefaultAsync(c => c.CourseId == dto.CourseId);
 
-                if (course == null)
-                {
-                    response.Success = false;
-                    response.Message = "Course not found.";
-                    return response;
-                }
-
-                if (course.InstructorUserId != createdByUserId)
-                {
-                    response.Success = false;
-                    response.Message = "Only the course instructor or admin can create a quiz.";
-                    return response;
-                }
-
-                if (await _context.Quizzes.AnyAsync(q => q.Title == dto.Title && q.CourseId == dto.CourseId))
-                {
-                    response.Success = false;
-                    response.Message = "A quiz with this title already exists in this course.";
-                    return response;
-                }
-
-                var quiz = _mapper.Map<QuizModel>(dto);
-                _context.Quizzes.Add(quiz);
-                await _context.SaveChangesAsync();
-
-                response.Data = _mapper.Map<QuizDTO.QuizListItemDto>(quiz);
-                response.Message = "Quiz created successfully.";
-            }
-            catch (Exception ex)
+            if (course == null)
             {
                 response.Success = false;
-                response.Message = $"Error creating quiz: {ex.Message}";
+                response.Message = "Course not found.";
+                return response;
             }
 
+            // Only teacher of this course or admin can create quiz
+            if (course.InstructorUserId != createdByUserId &&
+                !await UserIsAdmin(createdByUserId))
+            {
+                response.Success = false;
+                response.Message = "Only the course instructor or an admin can create quizzes.";
+                return response;
+            }
+
+            if (await _context.Quizzes.AnyAsync(q => q.Title == dto.Title && q.CourseId == dto.CourseId))
+            {
+                response.Success = false;
+                response.Message = "Quiz with this title already exists.";
+                return response;
+            }
+
+            var quiz = _mapper.Map<QuizModel>(dto);
+            _context.Quizzes.Add(quiz);
+            await _context.SaveChangesAsync();
+
+            response.Data = _mapper.Map<QuizDTO.QuizListItemDto>(quiz);
+            response.Message = "Quiz created successfully.";
             return response;
         }
 
-        //PUT /api/quizzes/{id}
         public async Task<ServiceResponse<QuizDTO.QuizListItemDto>> UpdateQuizAsync(long quizId, QuizDTO.UpdateQuizDto dto, long updatedByUserId)
         {
             var response = new ServiceResponse<QuizDTO.QuizListItemDto>();
-            var quiz = await _context.Quizzes.Include(q => q.Course).FirstOrDefaultAsync(q => q.QuizId == quizId);
+
+            var quiz = await _context.Quizzes
+                .Include(q => q.Course)
+                .FirstOrDefaultAsync(q => q.QuizId == quizId);
 
             if (quiz == null)
             {
@@ -167,22 +153,23 @@ namespace OnlineQuiz.Repository
                 return response;
             }
 
-            if (quiz.Course.InstructorUserId != updatedByUserId)
+            if (quiz.Course.InstructorUserId != updatedByUserId && !await UserIsAdmin(updatedByUserId))
             {
                 response.Success = false;
-                response.Message = "You are not allowed to update this quiz.";
+                response.Message = "You are not authorized to update this quiz.";
                 return response;
             }
 
-            quiz.Title = dto.Title ?? quiz.Title;
+            if (!string.IsNullOrWhiteSpace(dto.Title))
+                quiz.Title = dto.Title;
 
             await _context.SaveChangesAsync();
+
             response.Data = _mapper.Map<QuizDTO.QuizListItemDto>(quiz);
             response.Message = "Quiz updated successfully.";
             return response;
         }
 
-        //DELETE /api/quizzes/{id}
         public async Task<ServiceResponse<bool>> DeleteQuizAsync(long quizId, long requestedByUserId)
         {
             var response = new ServiceResponse<bool>();
@@ -195,7 +182,7 @@ namespace OnlineQuiz.Repository
                 return response;
             }
 
-            if (quiz.Course.InstructorUserId != requestedByUserId)
+            if (quiz.Course.InstructorUserId != requestedByUserId && !await UserIsAdmin(requestedByUserId))
             {
                 response.Success = false;
                 response.Message = "You are not authorized to delete this quiz.";
@@ -210,11 +197,9 @@ namespace OnlineQuiz.Repository
             return response;
         }
 
-        //POST /api/quizzes/{id}/publish
         public async Task<ServiceResponse<bool>> PublishQuizAsync(long quizId, long requestedByUserId)
         {
             var response = new ServiceResponse<bool>();
-
             var quiz = await _context.Quizzes
                 .Include(q => q.Questions)
                 .Include(q => q.Course)
@@ -227,10 +212,10 @@ namespace OnlineQuiz.Repository
                 return response;
             }
 
-            if (quiz.Course.InstructorUserId != requestedByUserId)
+            if (quiz.Course.InstructorUserId != requestedByUserId && !await UserIsAdmin(requestedByUserId))
             {
                 response.Success = false;
-                response.Message = "You are not authorized to publish this quiz.";
+                response.Message = "Not authorized to publish.";
                 return response;
             }
 
@@ -241,12 +226,121 @@ namespace OnlineQuiz.Repository
                 return response;
             }
 
-            //Simulate publish without model fields
             Console.WriteLine($"[Notify] Quiz '{quiz.Title}' published for course '{quiz.Course.Name}'.");
-
             response.Data = true;
             response.Message = "Quiz published successfully.";
             return response;
+        }
+
+        // QUESTION MANAGEMENT
+
+        public async Task<ServiceResponse<QuizDTO.QuestionDto>> AddQuestionAsync(QuizDTO.CreateQuestionDto dto)
+        {
+            var response = new ServiceResponse<QuizDTO.QuestionDto>();
+
+            var quiz = await _context.Quizzes.Include(q => q.Course)
+                .FirstOrDefaultAsync(q => q.QuizId == dto.QuizId);
+
+            if (quiz == null)
+            {
+                response.Success = false;
+                response.Message = "Quiz not found.";
+                return response;
+            }
+
+            var question = new QuestionModel
+            {
+                QuizId = dto.QuizId,
+                Type = "Single",
+                Body = dto.Text,
+                SortOrder = 1,
+                Points = 1
+            };
+
+            _context.Questions.Add(question);
+            await _context.SaveChangesAsync();
+
+            if (dto.Choices != null && dto.Choices.Any())
+            {
+                foreach (var c in dto.Choices)
+                {
+                    _context.Choices.Add(new ChoiceModel
+                    {
+                        QuestionId = question.QuestionId,
+                        Body = c.Text,
+                        IsCorrect = c.IsCorrect
+                    });
+                }
+
+                await _context.SaveChangesAsync();
+            }
+
+            response.Data = _mapper.Map<QuizDTO.QuestionDto>(question);
+            response.Message = "Question created successfully.";
+            return response;
+        }
+
+        public async Task<ServiceResponse<IEnumerable<QuizDTO.QuestionDto>>> GetQuestionsByQuizIdAsync(long quizId)
+        {
+            var response = new ServiceResponse<IEnumerable<QuizDTO.QuestionDto>>();
+            var questions = await _context.Questions
+                .Include(q => q.Choices)
+                .Where(q => q.QuizId == quizId)
+                .ToListAsync();
+
+            response.Data = _mapper.Map<IEnumerable<QuizDTO.QuestionDto>>(questions);
+            response.Message = "Questions retrieved successfully.";
+            return response;
+        }
+
+        public async Task<ServiceResponse<bool>> AddChoicesAsync(long questionId, IEnumerable<QuizDTO.CreateChoiceDto> choices)
+        {
+            var response = new ServiceResponse<bool>();
+
+            var question = await _context.Questions.FindAsync(questionId);
+            if (question == null)
+            {
+                response.Success = false;
+                response.Message = "Question not found.";
+                return response;
+            }
+
+            foreach (var c in choices)
+            {
+                _context.Choices.Add(new ChoiceModel
+                {
+                    QuestionId = questionId,
+                    Body = c.Text,
+                    IsCorrect = c.IsCorrect
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            response.Data = true;
+            response.Message = "Choices added successfully.";
+            return response;
+        }
+
+        public async Task<ServiceResponse<IEnumerable<QuizDTO.ChoiceDto>>> GetChoicesByQuestionIdAsync(long questionId)
+        {
+            var response = new ServiceResponse<IEnumerable<QuizDTO.ChoiceDto>>();
+
+            var choices = await _context.Choices
+                .Where(c => c.QuestionId == questionId)
+                .ToListAsync();
+
+            response.Data = _mapper.Map<IEnumerable<QuizDTO.ChoiceDto>>(choices);
+            response.Message = "Choices retrieved successfully.";
+            return response;
+        }
+
+        // HELPER: Check if user is Admin
+
+        private async Task<bool> UserIsAdmin(long userId)
+        {
+            return await _context.UserRoles
+                .Include(ur => ur.Role)
+                .AnyAsync(ur => ur.UserId == userId && ur.Role.Name == "Admin");
         }
     }
 }

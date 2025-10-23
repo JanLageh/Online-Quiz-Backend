@@ -70,5 +70,37 @@ namespace OnlineQuiz.Controllers
             var response = await _service.PublishQuizAsync(id, userId);
             return response.Success ? Ok(response) : BadRequest(response);
         }
+        //Add a new question to a quiz
+        [HttpPost("{quizId:long}/questions")]
+        public async Task<IActionResult> AddQuestion(long quizId, [FromBody] QuizDTO.CreateQuestionDto dto)
+        {
+            dto.QuizId = quizId;
+            var response = await _service.AddQuestionAsync(dto);
+            return response.Success ? Ok(response) : BadRequest(response);
+        }
+
+        //Get all questions for a quiz
+        [HttpGet("{quizId:long}/questions")]
+        public async Task<IActionResult> GetQuestions(long quizId)
+        {
+            var response = await _service.GetQuestionsByQuizIdAsync(quizId);
+            return response.Success ? Ok(response) : NotFound(response);
+        }
+
+        //Add choices to a question
+        [HttpPost("/api/questions/{questionId:long}/choices")]
+        public async Task<IActionResult> AddChoices(long questionId, [FromBody] IEnumerable<QuizDTO.CreateChoiceDto> choices)
+        {
+            var response = await _service.AddChoicesAsync(questionId, choices);
+            return response.Success ? Ok(response) : BadRequest(response);
+        }
+
+        //Get all choices for a question
+        [HttpGet("/api/questions/{questionId:long}/choices")]
+        public async Task<IActionResult> GetChoices(long questionId)
+        {
+            var response = await _service.GetChoicesByQuestionIdAsync(questionId);
+            return response.Success ? Ok(response) : NotFound(response);
+        }
     }
 }

@@ -66,15 +66,52 @@ namespace OnlineQuiz.DTOs
             public string Text { get; set; } = string.Empty;
             public bool IsCorrect { get; set; }
         }
-
-        //Generic pagination wrapper
-        public class PagedResult<T>
+        // Used when creating a question under a quiz
+        public class CreateQuestionDto
         {
-            public int CurrentPage { get; set; }
-            public int PageSize { get; set; }
-            public int TotalItems { get; set; }
-            public int TotalPages { get; set; }
-            public IEnumerable<T> Items { get; set; } = new List<T>();
+            public long QuizId { get; set; }
+            public string Type { get; set; } = "Single"; // Single, Multiple, Text
+            public string Body { get; set; } = string.Empty;
+            public string Text { get => Body; set => Body = value; }
+            public decimal Points { get; set; } = 1;
+            public int SortOrder { get; set; } = 1;
+
+            // optional: allow creating choices when adding question
+            public List<CreateChoiceDto> Choices { get; set; } = new();
+        }
+
+        public class UpdateQuestionDto
+        {
+            public string? Type { get; set; }
+            public string? Body { get; set; }
+            public decimal? Points { get; set; }
+            public int? SortOrder { get; set; }
+
+            // optional: provide choices to replace existing ones
+            public List<CreateChoiceDto>? Choices { get; set; }
+        }
+
+        // Used when adding choices under a question
+        public class CreateChoiceDto
+        {
+            [Required]
+            [StringLength(300)]
+            public string Text { get; set; } = string.Empty;
+
+            [Required]
+            public bool IsCorrect { get; set; }
+
+
+        }
+            //Generic pagination wrapper
+            public class PagedResult<T>
+            {
+                public int CurrentPage { get; set; }
+                public int PageSize { get; set; }
+                public int TotalItems { get; set; }
+                public int TotalPages { get; set; }
+                public IEnumerable<T> Items { get; set; } = new List<T>();
+            }
         }
     }
-}
+

@@ -17,6 +17,7 @@ namespace OnlineQuiz.Services
             _mapper = mapper;
         }
 
+        //This fixes your controller error
         public Task<ServiceResponse<QuizDTO.PagedResult<QuizDTO.QuizListItemDto>>> GetQuizzesAsync(
             int page = 1, int pageSize = 10, long? courseId = null, long? teacherId = null)
             => _repo.GetPagedQuizzesAsync(page, pageSize, courseId, teacherId);
@@ -35,5 +36,17 @@ namespace OnlineQuiz.Services
 
         public Task<ServiceResponse<bool>> PublishQuizAsync(long quizId, long requestedByUserId)
             => _repo.PublishQuizAsync(quizId, requestedByUserId);
+
+        public Task<ServiceResponse<QuizDTO.QuestionDto>> AddQuestionAsync(QuizDTO.CreateQuestionDto dto)
+            => _repo.AddQuestionAsync(dto);
+
+        public Task<ServiceResponse<IEnumerable<QuizDTO.QuestionDto>>> GetQuestionsByQuizIdAsync(long quizId)
+            => _repo.GetQuestionsByQuizIdAsync(quizId);
+
+        public Task<ServiceResponse<bool>> AddChoicesAsync(long questionId, IEnumerable<QuizDTO.CreateChoiceDto> choices)
+            => _repo.AddChoicesAsync(questionId, choices);
+
+        public Task<ServiceResponse<IEnumerable<QuizDTO.ChoiceDto>>> GetChoicesByQuestionIdAsync(long questionId)
+            => _repo.GetChoicesByQuestionIdAsync(questionId);
     }
 }
