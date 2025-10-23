@@ -19,9 +19,8 @@ namespace OnlineQuiz.Repository
             _mapper = mapper;
         }
 
-        // =============================
+        
         // QUIZ CRUD
-        // =============================
         public async Task<ServiceResponse<QuizDTO.PagedResult<QuizDTO.QuizListItemDto>>> GetPagedQuizzesAsync(
             int page = 1, int pageSize = 10, long? courseId = null, long? teacherId = null)
         {
