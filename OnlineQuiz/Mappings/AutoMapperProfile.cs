@@ -23,13 +23,11 @@ namespace OnlineQuiz.Mappings
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForAllMembers(opt => opt.Condition((src, dest, srcMember) => srcMember != null));
 
-
             CreateMap<EnrollmentModel, UserDto>()
                 .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.User.UserId))
                 .ForMember(dest => dest.FullName, opt => opt.MapFrom(src => src.User.FullName))
                 .ForMember(dest => dest.Email, opt => opt.MapFrom(src => src.User.Email))
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.User.Status));
-
 
             CreateMap<UserModel, CourseDTO.EnrolledStudentDto>()
                 .ForMember(dest => dest.StudentId, opt => opt.MapFrom(src => src.UserId))
@@ -43,7 +41,7 @@ namespace OnlineQuiz.Mappings
                         ? src.Instructor.User.FullName
                         : "N/A"))
                 .ForMember(dest => dest.EnrolledStudents, opt => opt.MapFrom(src =>
-                    src.Enrollments.Select(e => e.User))) // Users mapped via the mapping above
+                    src.Enrollments.Select(e => e.User)))
                 .ForMember(dest => dest.EnrollmentCount, opt => opt.MapFrom(src => src.Enrollments.Count))
                 .ForMember(dest => dest.QuizCount, opt => opt.MapFrom(src => src.Quizzes.Count))
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status))
@@ -65,13 +63,50 @@ namespace OnlineQuiz.Mappings
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForAllMembers(opt => opt.Condition((src, dest, srcMember) => srcMember != null));
 
+            CreateMap<QuizModel, QuizDTO.QuizListItemDto>()
+                .ForMember(dest => dest.CourseName, opt => opt.MapFrom(src => src.Course.Name))
+                .ForMember(dest => dest.TeacherName, opt => opt.MapFrom(src => src.Course.Instructor.User.FullName))
+                .ForMember(dest => dest.TotalAttempts, opt => opt.MapFrom(src => src.Attempts.Count))
+                .ForMember(dest => dest.AverageScore, opt => opt.MapFrom(src =>
+                    src.Attempts.Any() ? (double)src.Attempts.Average(a => a.Score) : 0));
+
+            CreateMap<QuizModel, QuizDTO.QuizDetailDto>()
+                .ForMember(dest => dest.CourseName, opt => opt.MapFrom(src => src.Course.Name))
+                .ForMember(dest => dest.TeacherName, opt => opt.MapFrom(src => src.Course.Instructor.User.FullName))
+                .ForMember(dest => dest.Questions, opt => opt.MapFrom(src => src.Questions))
+                .ForMember(dest => dest.TotalAttempts, opt => opt.MapFrom(src => src.Attempts.Count))
+                .ForMember(dest => dest.AverageScore, opt => opt.MapFrom(src =>
+                    src.Attempts.Any() ? (double)src.Attempts.Average(a => a.Score) : 0));
+
+            CreateMap<QuizDTO.CreateQuizDto, QuizModel>()
+                .ForMember(dest => dest.Title, opt => opt.MapFrom(src => src.Title))
+                .ForMember(dest => dest.CourseId, opt => opt.MapFrom(src => src.CourseId));
+
+            CreateMap<QuizDTO.UpdateQuizDto, QuizModel>()
+                .ForAllMembers(opt => opt.Condition((src, dest, srcMember) => srcMember != null));
+
+            CreateMap<QuestionModel, QuizDTO.QuestionDto>()
+                .ForMember(dest => dest.Choices, opt => opt.MapFrom(src => src.Choices));
+
+            //mapping for ChoiceModel
+            CreateMap<ChoiceModel, QuizDTO.ChoiceDto>()
+                .ForMember(dest => dest.Text, opt => opt.MapFrom(src => src.Body));
+
+            CreateMap<QuizDTO.ChoiceDto, ChoiceModel>()
+                .ForMember(dest => dest.Body, opt => opt.MapFrom(src => src.Text));
+
+            CreateMap<QuizDTO.CreateChoiceDto, ChoiceModel>()
+                .ForMember(dest => dest.Body, opt => opt.MapFrom(src => src.Text));
+
+            // Reverse direction
+            CreateMap<QuizDTO.QuestionDto, QuestionModel>()
+                .ForMember(dest => dest.Choices, opt => opt.MapFrom(src => src.Choices));
 
             CreateMap<TeacherModel, TeacherDto>();
             CreateMap<CreateTeacherDto, TeacherModel>();
 
             CreateMap<StudentModel, StudentDto>();
             CreateMap<CreateStudentDto, StudentModel>();
-
 
             CreateMap<RoleModel, string>().ConvertUsing(src => src.Name);
         }
