@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using OnlineQuiz.DTOs;
 using OnlineQuiz.IServices;
 
 namespace OnlineQuiz.Controllers
@@ -7,67 +8,57 @@ namespace OnlineQuiz.Controllers
     [Route("api/[controller]")]
     public class ImportExportController : ControllerBase
     {
-        private readonly IImportExportService _service;
+        private readonly IImportExportService _importExportService;
 
-        public ImportExportController(IImportExportService service)
+        public ImportExportController(IImportExportService importExportService)
         {
-            _service = service;
+            _importExportService = importExportService;
         }
 
-        // POST: /api/importexport/import/students
+        private long? GetCurrentUserId()
+        {
+            var idClaim = User.FindFirst("nameid")?.Value;
+            return long.TryParse(idClaim, out var userId) ? userId : null;
+        }
+
         [HttpPost("import/students")]
-        public async Task<IActionResult> ImportStudents([FromForm] IFormFile file)
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> ImportStudents([FromForm] ImportStudentsRequest request)
         {
-            if (file == null || file.Length == 0)
-                return BadRequest("No file uploaded.");
-
-            var result = await _service.ImportStudentsAsync(file);
-            return result.Success ? Ok(result) : BadRequest(result);
+            var userId = request.UserId ?? GetCurrentUserId();
+            var result = await _importExportService.ImportStudentsFromFileAsync(request.File, userId);
+            return Ok(result);
         }
 
-        // POST: /api/importexport/import/questions
         [HttpPost("import/questions")]
-        public async Task<IActionResult> ImportQuestions([FromForm] IFormFile file, [FromQuery] long quizId)
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> ImportQuestions([FromForm] ImportQuestionsRequest request)
         {
-            if (file == null || file.Length == 0)
-                return BadRequest("No file uploaded.");
-
-            var result = await _service.ImportQuestionsAsync(file, quizId);
-            return result.Success ? Ok(result) : BadRequest(result);
+            var userId = request.UserId ?? GetCurrentUserId();
+            var result = await _importExportService.ImportQuestionsFromFileAsync(request.File, request.QuizId, userId);
+            return Ok(result);
         }
 
-        // GET: /api/importexport/export/students/{courseId}
-        [HttpGet("export/students/{courseId:long}")]
+        [HttpGet("export/students/{courseId}")]
         public async Task<IActionResult> ExportStudents(long courseId, [FromQuery] string format = "csv")
         {
-            var fileResult = await _service.ExportStudentsAsync(courseId, format);
-            if (!fileResult.Success || fileResult.Data == null)
-                return BadRequest(fileResult.Message);
-
-            var fileBytes = fileResult.Data;
-            var contentType = format.ToLower() == "xlsx"
+            var userId = GetCurrentUserId();
+            var fileBytes = await _importExportService.ExportStudentsToFileAsync(courseId, format, userId);
+            var mimeType = format == "xlsx"
                 ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 : "text/csv";
-            var fileName = $"Students_Course_{courseId}_{DateTime.UtcNow:yyyyMMddHHmmss}.{format}";
-
-            return File(fileBytes, contentType, fileName);
+            return File(fileBytes, mimeType, $"students_{courseId}.{format}");
         }
 
-        // GET: /api/importexport/export/results/{quizId}
-        [HttpGet("export/results/{quizId:long}")]
-        public async Task<IActionResult> ExportQuizResults(long quizId, [FromQuery] string format = "csv")
+        [HttpGet("export/results/{quizId}")]
+        public async Task<IActionResult> ExportResults(long quizId, [FromQuery] string format = "csv")
         {
-            var fileResult = await _service.ExportQuizResultsAsync(quizId, format);
-            if (!fileResult.Success || fileResult.Data == null)
-                return BadRequest(fileResult.Message);
-
-            var fileBytes = fileResult.Data;
-            var contentType = format.ToLower() == "xlsx"
+            var userId = GetCurrentUserId();
+            var fileBytes = await _importExportService.ExportQuizResultsToFileAsync(quizId, format, userId);
+            var mimeType = format == "xlsx"
                 ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 : "text/csv";
-            var fileName = $"QuizResults_{quizId}_{DateTime.UtcNow:yyyyMMddHHmmss}.{format}";
-
-            return File(fileBytes, contentType, fileName);
+            return File(fileBytes, mimeType, $"quiz_results_{quizId}.{format}");
         }
     }
 }

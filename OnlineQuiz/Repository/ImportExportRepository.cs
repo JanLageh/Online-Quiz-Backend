@@ -1,12 +1,15 @@
 ﻿using CsvHelper;
+using CsvHelper.Configuration;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using OnlineQuiz.Data;
+using OnlineQuiz.DTOs;
 using OnlineQuiz.IRepository;
 using OnlineQuiz.Models;
 using System.Globalization;
 using System.Text;
+using static OnlineQuiz.DTOs.ImportExportDtos;
 
 namespace OnlineQuiz.Repository
 {
@@ -19,173 +22,231 @@ namespace OnlineQuiz.Repository
             _context = context;
         }
 
-        public async Task<string> ImportStudentsFromFileAsync(IFormFile file)
+        public async Task<ImportResponseDto> ImportStudentsFromFileAsync(IFormFile file, long? userId)
         {
-            var importedCount = 0;
+            var response = new ImportResponseDto();
             var errors = new List<string>();
 
             try
             {
+                // Validate file
+                if (file == null || file.Length == 0)
+                {
+                    response.Success = false;
+                    response.Message = "No file provided or file is empty.";
+                    return response;
+                }
+
+                var extension = Path.GetExtension(file.FileName).ToLower();
+                if (extension != ".csv" && extension != ".xlsx")
+                {
+                    response.Success = false;
+                    response.Message = "Invalid file format. Only CSV and XLSX are supported.";
+                    return response;
+                }
+
                 using var stream = new MemoryStream();
                 await file.CopyToAsync(stream);
                 stream.Position = 0;
 
-                var extension = Path.GetExtension(file.FileName).ToLower();
-                var students = new List<StudentModel>();
+                var students = new List<ImportStudentDto>();
 
                 if (extension == ".csv")
                 {
-                    using var reader = new StreamReader(stream);
-                    using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
-                    var records = csv.GetRecords<dynamic>().ToList();
-
-                    foreach (var record in records)
-                    {
-                        var email = record.Email?.ToString() ?? "";
-                        bool exists = _context.Users.AsEnumerable().Any(u => u.Email == email);
-                        if (string.IsNullOrEmpty(email) || exists)
-                        {
-                            errors.Add($"Duplicate or invalid email: {email}");
-                            continue;
-                        }
-
-                        var user = new UserModel
-                        {
-                            Email = email,
-                            FullName = record.FullName,
-                            PasswordHash = "Default@123", // placeholder
-                            Status = "Active",
-                            CreatedAt = DateTime.UtcNow
-                        };
-
-                        var student = new StudentModel
-                        {
-                            User = user,
-                            StudentNumber = record.StudentNumber
-                        };
-
-                        _context.Users.Add(user);
-                        _context.Students.Add(student);
-                        importedCount++;
-                    }
+                    students = await ParseCsvStudents(stream, errors);
                 }
                 else if (extension == ".xlsx")
                 {
-                    using var workbook = new XLWorkbook(stream);
-                    var ws = workbook.Worksheets.First();
-                    var rows = ws.RowsUsed().Skip(1);
+                    students = ParseExcelStudents(stream, errors);
+                }
 
-                    foreach (var row in rows)
+                // Import students to database
+                foreach (var student in students)
+                {
+                    try
                     {
-                        var email = row.Cell(2).GetString();
-                        if (string.IsNullOrEmpty(email) || _context.Users.Any(u => u.Email == email))
+                        // Check if user already exists
+                        var existingUser = await _context.Users
+                            .FirstOrDefaultAsync(u => u.Email == student.Email);
+
+                        if (existingUser != null)
                         {
-                            errors.Add($"Duplicate or invalid email: {email}");
+                            errors.Add($"Email already exists: {student.Email}");
                             continue;
                         }
 
+                        // Check if student number already exists
+                        var existingStudent = await _context.Students
+                            .FirstOrDefaultAsync(s => s.StudentNumber == student.StudentNumber);
+
+                        if (existingStudent != null)
+                        {
+                            errors.Add($"Student number already exists: {student.StudentNumber}");
+                            continue;
+                        }
+
+                        // Create user
                         var user = new UserModel
                         {
-                            Email = email,
-                            FullName = row.Cell(1).GetString(),
-                            PasswordHash = "Default@123",
+                            Email = student.Email,
+                            FullName = student.FullName,
+                            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Default@123"),
                             Status = "Active",
-                            CreatedAt = DateTime.UtcNow
-                        };
-
-                        var student = new StudentModel
-                        {
-                            User = user,
-                            StudentNumber = row.Cell(3).GetString()
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
                         };
 
                         _context.Users.Add(user);
-                        _context.Students.Add(student);
-                        importedCount++;
+                        await _context.SaveChangesAsync(); // Save to get UserId
+
+                        // Create student
+                        var studentModel = new StudentModel
+                        {
+                            UserId = user.UserId,
+                            StudentNumber = student.StudentNumber
+                        };
+
+                        _context.Students.Add(studentModel);
+
+                        // Assign Student role
+                        var studentRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Student");
+                        if (studentRole != null)
+                        {
+                            _context.UserRoles.Add(new UserRoleModel
+                            {
+                                UserId = user.UserId,
+                                RoleId = studentRole.RoleId
+                            });
+                        }
+
+                        response.ImportedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add($"Error importing {student.Email}: {ex.Message}");
                     }
                 }
 
                 await _context.SaveChangesAsync();
 
-                await LogOperationAsync("ImportStudents", $"Imported {importedCount} students.");
-                return $"Successfully imported {importedCount} students. {errors.Count} errors.";
+                response.Success = true;
+                response.ErrorCount = errors.Count;
+                response.Errors = errors;
+                response.Message = $"Successfully imported {response.ImportedCount} students. {errors.Count} errors.";
+
+                await LogOperationAsync("Import", "Students", file.FileName, userId);
+
+                return response;
             }
             catch (Exception ex)
             {
-                await LogOperationAsync("ImportStudents", $"Error: {ex.Message}");
-                throw;
+                response.Success = false;
+                response.Message = $"Import failed: {ex.Message}";
+                response.Errors = errors;
+
+                await LogOperationAsync("Import", "Students", file.FileName, userId);
+
+                return response;
             }
         }
 
-        public async Task<string> ImportQuestionsFromFileAsync(IFormFile file, long quizId)
+        public async Task<ImportResponseDto> ImportQuestionsFromFileAsync(IFormFile file, long quizId, long? userId)
         {
-            var importedCount = 0;
+            var response = new ImportResponseDto();
+            var errors = new List<string>();
 
             try
             {
+                // Validate file
+                if (file == null || file.Length == 0)
+                {
+                    response.Success = false;
+                    response.Message = "No file provided or file is empty.";
+                    return response;
+                }
+
+                var extension = Path.GetExtension(file.FileName).ToLower();
+                if (extension != ".csv" && extension != ".xlsx")
+                {
+                    response.Success = false;
+                    response.Message = "Invalid file format. Only CSV and XLSX are supported.";
+                    return response;
+                }
+
+                // Validate quiz exists
+                var quiz = await _context.Quizzes
+                    .Include(q => q.Questions)
+                    .FirstOrDefaultAsync(q => q.QuizId == quizId);
+
+                if (quiz == null)
+                {
+                    response.Success = false;
+                    response.Message = "Quiz not found.";
+                    return response;
+                }
+
                 using var stream = new MemoryStream();
                 await file.CopyToAsync(stream);
                 stream.Position = 0;
 
-                var extension = Path.GetExtension(file.FileName).ToLower();
-                var quiz = await _context.Quizzes.Include(q => q.Questions)
-                                                 .FirstOrDefaultAsync(q => q.QuizId == quizId);
-                if (quiz == null) throw new Exception("Quiz not found.");
+                var questions = new List<ImportQuestionDto>();
 
                 if (extension == ".csv")
                 {
-                    using var reader = new StreamReader(stream);
-                    using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
-                    var records = csv.GetRecords<dynamic>().ToList();
-
-                    foreach (var record in records)
-                    {
-                        var question = new QuestionModel
-                        {
-                            QuizId = quizId,
-                            Body = record.Body,
-                            Type = record.Type ?? "Single",
-                            Points = Convert.ToDecimal(record.Points ?? 1),
-                            SortOrder = Convert.ToInt32(record.SortOrder ?? 1)
-                        };
-                        _context.Questions.Add(question);
-                        importedCount++;
-                    }
+                    questions = await ParseCsvQuestions(stream, errors);
                 }
                 else if (extension == ".xlsx")
                 {
-                    using var workbook = new XLWorkbook(stream);
-                    var ws = workbook.Worksheets.First();
-                    var rows = ws.RowsUsed().Skip(1);
+                    questions = ParseExcelQuestions(stream, errors);
+                }
 
-                    foreach (var row in rows)
+                // Import questions to database
+                foreach (var question in questions)
+                {
+                    try
                     {
-                        var question = new QuestionModel
+                        var questionModel = new QuestionModel
                         {
                             QuizId = quizId,
-                            Body = row.Cell(1).GetString(),
-                            Type = row.Cell(2).GetString() ?? "Single",
-                            Points = row.Cell(3).GetValue<decimal>(),
-                            SortOrder = row.Cell(4).GetValue<int>()
+                            Body = question.Body,
+                            Type = question.Type,
+                            Points = question.Points,
+                            SortOrder = question.SortOrder
                         };
-                        _context.Questions.Add(question);
-                        importedCount++;
+
+                        _context.Questions.Add(questionModel);
+                        response.ImportedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add($"Error importing question: {ex.Message}");
                     }
                 }
 
                 await _context.SaveChangesAsync();
 
-                await LogOperationAsync("ImportQuestions", $"Imported {importedCount} questions for quiz {quizId}.");
-                return $"Successfully imported {importedCount} questions.";
+                response.Success = true;
+                response.ErrorCount = errors.Count;
+                response.Errors = errors;
+                response.Message = $"Successfully imported {response.ImportedCount} questions. {errors.Count} errors.";
+
+                await LogOperationAsync("Import", "Questions", file.FileName, userId);
+
+                return response;
             }
             catch (Exception ex)
             {
-                await LogOperationAsync("ImportQuestions", $"Error: {ex.Message}");
-                throw;
+                response.Success = false;
+                response.Message = $"Import failed: {ex.Message}";
+                response.Errors = errors;
+
+                await LogOperationAsync("Import", "Questions", file.FileName, userId);
+
+                return response;
             }
         }
 
-        public async Task<byte[]> ExportStudentsToFileAsync(long courseId, string format = "csv")
+        public async Task<byte[]> ExportStudentsToFileAsync(long courseId, string format, long? userId)
         {
             var enrollments = await _context.Enrollments
                 .Include(e => e.User)
@@ -193,16 +254,16 @@ namespace OnlineQuiz.Repository
                 .Where(e => e.CourseId == courseId)
                 .ToListAsync();
 
-            var data = enrollments.Select(e => new
+            var data = enrollments.Select(e => new ExportStudentDto
             {
-                e.User.FullName,
-                e.User.Email,
-                e.User.Status,
-                e.Course.Name,
-                e.Course.Code
+                FullName = e.User.FullName,
+                Email = e.User.Email,
+                Status = e.User.Status,
+                CourseName = e.Course.Name,
+                CourseCode = e.Course.Code
             }).ToList();
 
-            await LogOperationAsync("ExportStudents", $"Exported {data.Count} students from course {courseId}.");
+            await LogOperationAsync("Export", "Students", $"students_{courseId}.{format}", userId);
 
             return format.ToLower() switch
             {
@@ -211,25 +272,25 @@ namespace OnlineQuiz.Repository
             };
         }
 
-
-        public async Task<byte[]> ExportQuizResultsToFileAsync(long quizId, string format = "csv")
+        public async Task<byte[]> ExportQuizResultsToFileAsync(long quizId, string format, long? userId)
         {
             var quiz = await _context.Quizzes
-                .Include(q => q.Attempts).ThenInclude(a => a.User)
+                .Include(q => q.Attempts)
+                    .ThenInclude(a => a.User)
                 .FirstOrDefaultAsync(q => q.QuizId == quizId);
 
             if (quiz == null)
                 throw new Exception("Quiz not found.");
 
-            var results = quiz.Attempts.Select(a => new
+            var results = quiz.Attempts.Select(a => new ExportResultDto
             {
                 Student = a.User.FullName,
                 Email = a.User.Email,
-                a.Score,
-                a.SubmittedAt
+                Score = a.Score,
+                SubmittedAt = a.SubmittedAt
             }).ToList();
 
-            await LogOperationAsync("ExportResults", $"Exported results for quiz {quizId}.");
+            await LogOperationAsync("Export", "Results", $"quiz_results_{quizId}.{format}", userId);
 
             return format.ToLower() switch
             {
@@ -238,6 +299,197 @@ namespace OnlineQuiz.Repository
             };
         }
 
+        // Helper Methods
+        private async Task<List<ImportStudentDto>> ParseCsvStudents(Stream stream, List<string> errors)
+        {
+            var students = new List<ImportStudentDto>();
+
+            try
+            {
+                using var reader = new StreamReader(stream);
+                var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+                {
+                    HasHeaderRecord = true,
+                    MissingFieldFound = null,
+                    HeaderValidated = null
+                };
+
+                using var csv = new CsvReader(reader, config);
+
+                await foreach (var record in csv.GetRecordsAsync<ImportStudentDto>())
+                {
+                    if (ValidateStudent(record, errors))
+                    {
+                        students.Add(record);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"CSV parsing error: {ex.Message}");
+            }
+
+            return students;
+        }
+
+        private List<ImportStudentDto> ParseExcelStudents(Stream stream, List<string> errors)
+        {
+            var students = new List<ImportStudentDto>();
+
+            try
+            {
+                using var workbook = new XLWorkbook(stream);
+                var ws = workbook.Worksheets.First();
+                var rows = ws.RowsUsed().Skip(1); // Skip header
+
+                foreach (var row in rows)
+                {
+                    var student = new ImportStudentDto
+                    {
+                        FullName = row.Cell(1).GetString(),
+                        Email = row.Cell(2).GetString(),
+                        StudentNumber = row.Cell(3).GetString()
+                    };
+
+                    if (ValidateStudent(student, errors))
+                    {
+                        students.Add(student);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"Excel parsing error: {ex.Message}");
+            }
+
+            return students;
+        }
+
+        private async Task<List<ImportQuestionDto>> ParseCsvQuestions(Stream stream, List<string> errors)
+        {
+            var questions = new List<ImportQuestionDto>();
+
+            try
+            {
+                using var reader = new StreamReader(stream);
+                var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+                {
+                    HasHeaderRecord = true,
+                    MissingFieldFound = null,
+                    HeaderValidated = null
+                };
+
+                using var csv = new CsvReader(reader, config);
+
+                await foreach (var record in csv.GetRecordsAsync<ImportQuestionDto>())
+                {
+                    if (ValidateQuestion(record, errors))
+                    {
+                        questions.Add(record);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"CSV parsing error: {ex.Message}");
+            }
+
+            return questions;
+        }
+
+        private List<ImportQuestionDto> ParseExcelQuestions(Stream stream, List<string> errors)
+        {
+            var questions = new List<ImportQuestionDto>();
+
+            try
+            {
+                using var workbook = new XLWorkbook(stream);
+                var ws = workbook.Worksheets.First();
+                var rows = ws.RowsUsed().Skip(1); // Skip header
+
+                foreach (var row in rows)
+                {
+                    var question = new ImportQuestionDto
+                    {
+                        Body = row.Cell(1).GetString(),
+                        Type = row.Cell(2).GetString() ?? "Single",
+                        Points = row.Cell(3).TryGetValue(out decimal points) ? points : 1,
+                        SortOrder = row.Cell(4).TryGetValue(out int sortOrder) ? sortOrder : 1
+                    };
+
+                    if (ValidateQuestion(question, errors))
+                    {
+                        questions.Add(question);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"Excel parsing error: {ex.Message}");
+            }
+
+            return questions;
+        }
+
+        private bool ValidateStudent(ImportStudentDto student, List<string> errors)
+        {
+            if (string.IsNullOrWhiteSpace(student.FullName))
+            {
+                errors.Add("Full name is required.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(student.Email) || !IsValidEmail(student.Email))
+            {
+                errors.Add($"Invalid email: {student.Email}");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(student.StudentNumber))
+            {
+                errors.Add($"Student number is required for {student.Email}");
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool ValidateQuestion(ImportQuestionDto question, List<string> errors)
+        {
+            if (string.IsNullOrWhiteSpace(question.Body))
+            {
+                errors.Add("Question body is required.");
+                return false;
+            }
+
+            var validTypes = new[] { "Single", "Multiple", "TrueFalse" };
+            if (!validTypes.Contains(question.Type))
+            {
+                errors.Add($"Invalid question type: {question.Type}");
+                return false;
+            }
+
+            if (question.Points < 0 || question.Points > 100)
+            {
+                errors.Add($"Points must be between 0 and 100.");
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool IsValidEmail(string email)
+        {
+            try
+            {
+                var addr = new System.Net.Mail.MailAddress(email);
+                return addr.Address == email;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         private static byte[] GenerateCsv<T>(IEnumerable<T> data)
         {
@@ -259,21 +511,26 @@ namespace OnlineQuiz.Repository
             return ms.ToArray();
         }
 
-        private async Task LogOperationAsync(string action, string message)
+        private async Task LogOperationAsync(string action, string entity, string? fileName, long? userId)
         {
-            var log = new ExportImportLogModel
+            try
             {
-                Action = action,
-            };
+                var log = new ExportImportLogModel
+                {
+                    UserId = userId ?? 1, // Default to system user if not provided
+                    Action = action,
+                    Entity = entity,
+                    FileName = fileName,
+                    CreatedAt = DateTime.UtcNow
+                };
 
-            var detailsProp = typeof(ExportImportLogModel).GetProperty("Details") ??
-                              typeof(ExportImportLogModel).GetProperty("Description");
-
-            if (detailsProp != null)
-                detailsProp.SetValue(log, message);
-
-            _context.ExportImportLogs.Add(log);
-            await _context.SaveChangesAsync();
+                _context.ExportImportLogs.Add(log);
+                await _context.SaveChangesAsync();
+            }
+            catch
+            {
+                // Log operation should not break the main flow
+            }
         }
     }
 }

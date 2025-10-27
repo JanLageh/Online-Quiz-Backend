@@ -1,15 +1,14 @@
 ﻿using Microsoft.AspNetCore.Http;
-using OnlineQuiz.Models.Response;
-using System.Threading.Tasks;
+using OnlineQuiz.DTOs;
+using static OnlineQuiz.DTOs.ImportExportDtos;
 
 namespace OnlineQuiz.IServices
 {
     public interface IImportExportService
     {
-        Task<ServiceResponse<string>> ImportStudentsAsync(IFormFile file);
-        Task<ServiceResponse<string>> ImportQuestionsAsync(IFormFile file, long quizId);
-
-        Task<ServiceResponse<byte[]>> ExportStudentsAsync(long courseId, string format = "csv");
-        Task<ServiceResponse<byte[]>> ExportQuizResultsAsync(long quizId, string format = "csv");
+        Task<ImportResponseDto> ImportStudentsFromFileAsync(IFormFile file, long? userId);
+        Task<ImportResponseDto> ImportQuestionsFromFileAsync(IFormFile file, long quizId, long? userId);
+        Task<byte[]> ExportStudentsToFileAsync(long courseId, string format, long? userId);
+        Task<byte[]> ExportQuizResultsToFileAsync(long quizId, string format, long? userId);
     }
 }

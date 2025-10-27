@@ -8,6 +8,8 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.Identity" Version="1.16.0" />
+    <PackageReference Include="ClosedXML" Version="0.105.0" />
+    <PackageReference Include="CsvHelper" Version="33.1.0" />
     <!-- Remove deprecated DI package; functionality is in AutoMapper core since v13 -->
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.1" />

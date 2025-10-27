@@ -1,6 +1,7 @@
 ﻿using AutoMapper;
 using OnlineQuiz.DTOs;
 using OnlineQuiz.Models;
+using static OnlineQuiz.DTOs.ImportExportDtos;
 
 namespace OnlineQuiz.Mappings
 {
@@ -109,6 +110,14 @@ namespace OnlineQuiz.Mappings
             CreateMap<CreateStudentDto, StudentModel>();
 
             CreateMap<RoleModel, string>().ConvertUsing(src => src.Name);
+
+            // ExportImportLog mappings
+            CreateMap<ExportImportLogModel, ExportImportLogDto>()
+                .ForMember(dest => dest.UserName, opt => opt.MapFrom(src => src.User.FullName));
+
+            CreateMap<CreateExportImportLogDto, ExportImportLogModel>()
+                .ForMember(dest => dest.LogId, opt => opt.Ignore())
+                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow));
         }
     }
 }
