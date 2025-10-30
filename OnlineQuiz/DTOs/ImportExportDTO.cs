@@ -98,4 +98,5 @@ namespace OnlineQuiz.DTOs
             public string? FileName { get; set; }
         }
     }
+
 }

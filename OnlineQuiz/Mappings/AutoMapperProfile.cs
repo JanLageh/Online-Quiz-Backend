@@ -2,6 +2,7 @@
 using OnlineQuiz.DTOs;
 using OnlineQuiz.Models;
 using static OnlineQuiz.DTOs.ImportExportDtos;
+using static OnlineQuiz.DTOs.AttemptDtos;
 
 namespace OnlineQuiz.Mappings
 {
@@ -9,7 +10,7 @@ namespace OnlineQuiz.Mappings
     {
         public AutoMapperProfile()
         {
-
+            //mapping for UserModel to UserDto
             CreateMap<UserModel, UserDto>()
                 .ForMember(dest => dest.Roles, opt => opt.MapFrom(src => src.UserRoles.Select(ur => ur.Role.Name)));
 
@@ -24,6 +25,7 @@ namespace OnlineQuiz.Mappings
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForAllMembers(opt => opt.Condition((src, dest, srcMember) => srcMember != null));
 
+            //mapping for EnrollmentModel to UserDto
             CreateMap<EnrollmentModel, UserDto>()
                 .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.User.UserId))
                 .ForMember(dest => dest.FullName, opt => opt.MapFrom(src => src.User.FullName))
@@ -36,6 +38,8 @@ namespace OnlineQuiz.Mappings
                 .ForMember(dest => dest.FullName, opt => opt.MapFrom(src => src.FullName))
                 .ForMember(dest => dest.Email, opt => opt.MapFrom(src => src.Email));
 
+
+            //mapping for CourseModel to CourseDTO.CourseDto
             CreateMap<CourseModel, CourseDTO.CourseDto>()
                 .ForMember(dest => dest.InstructorName, opt => opt.MapFrom(src =>
                     src.Instructor != null && src.Instructor.User != null
@@ -64,6 +68,7 @@ namespace OnlineQuiz.Mappings
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForAllMembers(opt => opt.Condition((src, dest, srcMember) => srcMember != null));
 
+            //mapping for QuizModel to QuizDTO
             CreateMap<QuizModel, QuizDTO.QuizListItemDto>()
                 .ForMember(dest => dest.CourseName, opt => opt.MapFrom(src => src.Course.Name))
                 .ForMember(dest => dest.TeacherName, opt => opt.MapFrom(src => src.Course.Instructor.User.FullName))
@@ -118,6 +123,25 @@ namespace OnlineQuiz.Mappings
             CreateMap<CreateExportImportLogDto, ExportImportLogModel>()
                 .ForMember(dest => dest.LogId, opt => opt.Ignore())
                 .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow));
+
+            // Attempt mappings
+            CreateMap<AttemptModel, AttemptListDto>()
+                .ForMember(dest => dest.QuizTitle, opt => opt.MapFrom(src => src.Quiz.Title))
+                .ForMember(dest => dest.StudentName, opt => opt.MapFrom(src => src.User.FullName))
+                .ForMember(dest => dest.StudentEmail, opt => opt.MapFrom(src => src.User.Email))
+                .ForMember(dest => dest.SubmittedAt, opt => opt.MapFrom(src => src.SubmittedAt ?? DateTime.UtcNow));
+
+            CreateMap<AttemptModel, AttemptDetailDto>()
+                .ForMember(dest => dest.UserName, opt => opt.MapFrom(src => src.User.FullName))
+                .ForMember(dest => dest.QuizTitle, opt => opt.MapFrom(src => src.Quiz.Title))
+                .ForMember(dest => dest.SubmittedAt, opt => opt.MapFrom(src => src.SubmittedAt ?? DateTime.UtcNow))
+                .ForMember(dest => dest.Answers, opt => opt.MapFrom(src => src.AttemptAnswers));
+
+            CreateMap<AttemptAnswerModel, AttemptAnswerDetailDto>()
+                .ForMember(dest => dest.QuestionBody, opt => opt.MapFrom(src => src.Question.Body))
+                .ForMember(dest => dest.ChoiceText, opt => opt.MapFrom(src => src.Choice != null ? src.Choice.Body : null))
+                .ForMember(dest => dest.IsCorrect, opt => opt.MapFrom(src => src.IsCorrect ?? false))
+                .ForMember(dest => dest.PointsEarned, opt => opt.Ignore()); // Calculated in repository
         }
     }
 }

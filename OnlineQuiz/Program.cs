@@ -26,6 +26,7 @@ builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IImportExportRepository, ImportExportRepository>();
 builder.Services.AddScoped<IImportExportService, ImportExportService>();
 
+builder.Services.AddScoped<IAttemptRepository, AttemptRepository>();
 // Add services to the container.
 builder.Services.AddControllers()
     .AddJsonOptions(options =>

@@ -1,5 +1,6 @@
 ﻿using OnlineQuiz.DTOs;
 using OnlineQuiz.Models.Response;
+using static OnlineQuiz.DTOs.AttemptDtos;
 
 namespace OnlineQuiz.IServices
 {
@@ -30,5 +31,11 @@ namespace OnlineQuiz.IServices
         Task<ServiceResponse<bool>> AddChoicesAsync(long questionId, IEnumerable<QuizDTO.CreateChoiceDto> choices);
 
         Task<ServiceResponse<IEnumerable<QuizDTO.ChoiceDto>>> GetChoicesByQuestionIdAsync(long questionId);
+
+        //  ATTEMPT MANAGEMENT
+        Task<AttemptResultDto> SubmitAttemptAsync(SubmitAttemptDto dto, long userId);
+        Task<List<AttemptListDto>> GetUserAttemptsAsync(long userId);
+        Task<List<AttemptListDto>> GetQuizAttemptsAsync(long quizId);
+        Task<AttemptDetailDto> GetAttemptDetailAsync(long attemptId);
     }
 }
