@@ -66,6 +66,7 @@ namespace OnlineQuiz.DTOs
             public string Text { get; set; } = string.Empty;
             public bool IsCorrect { get; set; }
         }
+
         // Used when creating a question under a quiz
         public class CreateQuestionDto
         {
@@ -80,6 +81,7 @@ namespace OnlineQuiz.DTOs
             public List<CreateChoiceDto> Choices { get; set; } = new();
         }
 
+        // Used when updating a question
         public class UpdateQuestionDto
         {
             public string? Type { get; set; }
@@ -100,18 +102,25 @@ namespace OnlineQuiz.DTOs
 
             [Required]
             public bool IsCorrect { get; set; }
-
-
         }
-            //Generic pagination wrapper
-            public class PagedResult<T>
-            {
-                public int CurrentPage { get; set; }
-                public int PageSize { get; set; }
-                public int TotalItems { get; set; }
-                public int TotalPages { get; set; }
-                public IEnumerable<T> Items { get; set; } = new List<T>();
-            }
+
+        // Used when updating a choice
+        public class UpdateChoiceDto
+        {
+            [StringLength(300)]
+            public string? Text { get; set; }
+
+            public bool? IsCorrect { get; set; }
+        }
+
+        //Generic pagination wrapper
+        public class PagedResult<T>
+        {
+            public int CurrentPage { get; set; }
+            public int PageSize { get; set; }
+            public int TotalItems { get; set; }
+            public int TotalPages { get; set; }
+            public IEnumerable<T> Items { get; set; } = new List<T>();
         }
     }
-
+}

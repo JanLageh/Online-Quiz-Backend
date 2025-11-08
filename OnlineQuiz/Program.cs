@@ -27,7 +27,10 @@ builder.Services.AddScoped<IImportExportRepository, ImportExportRepository>();
 builder.Services.AddScoped<IImportExportService, ImportExportService>();
 
 builder.Services.AddScoped<IAttemptRepository, AttemptRepository>();
-// Add services to the container.
+
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -38,7 +41,7 @@ builder.Services.AddControllers()
     });
 
 // Configure Entity Framework
-var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") 
+var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
     ?? builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<OnlineQuizDbContext>(options =>
     options.UseSqlServer(connectionString));
@@ -150,14 +153,14 @@ builder.Services.AddCors(options =>
     // Combined policy for both
     options.AddPolicy("AllowWebAndMobile", policy =>
     {
-        policy.SetIsOriginAllowed(origin => 
-            {
-                // Allow localhost for development
-                if (string.IsNullOrEmpty(origin)) return true;
-                if (origin.StartsWith("http://localhost") || origin.StartsWith("https://localhost")) return true;
-                // Add your production domains here
-                return false;
-            })
+        policy.SetIsOriginAllowed(origin =>
+        {
+            // Allow localhost for development
+            if (string.IsNullOrEmpty(origin)) return true;
+            if (origin.StartsWith("http://localhost") || origin.StartsWith("https://localhost")) return true;
+            // Add your production domains here
+            return false;
+        })
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials()
@@ -169,13 +172,13 @@ builder.Services.AddCors(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new() 
-    { 
-        Title = "OnlineQuiz API", 
+    c.SwaggerDoc("v1", new()
+    {
+        Title = "OnlineQuiz API",
         Version = "v1",
         Description = "A comprehensive online quiz platform API"
     });
-    
+
     // Configure JWT Bearer authentication
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
@@ -186,7 +189,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "bearer",
         BearerFormat = "JWT"
     });
-    
+
     c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
     {
         {
@@ -227,12 +230,12 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "DENY";
     context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
     context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
-    
+
     // API-specific headers
     context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
     context.Response.Headers["Pragma"] = "no-cache";
     context.Response.Headers["Expires"] = "0";
-    
+
     await next();
 });
 

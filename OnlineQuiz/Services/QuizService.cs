@@ -20,6 +20,7 @@ namespace OnlineQuiz.Services
             _mapper = mapper;
         }
 
+        // QUIZ MANAGEMENT
         public Task<ServiceResponse<QuizDTO.PagedResult<QuizDTO.QuizListItemDto>>> GetQuizzesAsync(
             int page = 1, int pageSize = 10, long? courseId = null, long? teacherId = null)
             => _repo.GetPagedQuizzesAsync(page, pageSize, courseId, teacherId);
@@ -39,17 +40,34 @@ namespace OnlineQuiz.Services
         public Task<ServiceResponse<bool>> PublishQuizAsync(long quizId, long requestedByUserId)
             => _repo.PublishQuizAsync(quizId, requestedByUserId);
 
+        // QUESTION MANAGEMENT
         public Task<ServiceResponse<QuizDTO.QuestionDto>> AddQuestionAsync(QuizDTO.CreateQuestionDto dto)
             => _repo.AddQuestionAsync(dto);
 
         public Task<ServiceResponse<IEnumerable<QuizDTO.QuestionDto>>> GetQuestionsByQuizIdAsync(long quizId)
             => _repo.GetQuestionsByQuizIdAsync(quizId);
 
+        public Task<ServiceResponse<QuizDTO.QuestionDto>> GetQuestionByIdAsync(long questionId)
+            => _repo.GetQuestionByIdAsync(questionId);
+
+        public Task<ServiceResponse<QuizDTO.QuestionDto>> UpdateQuestionAsync(long questionId, QuizDTO.UpdateQuestionDto dto, long userId)
+            => _repo.UpdateQuestionAsync(questionId, dto, userId);
+
+        public Task<ServiceResponse<bool>> DeleteQuestionAsync(long questionId, long userId)
+            => _repo.DeleteQuestionAsync(questionId, userId);
+
+        // CHOICE MANAGEMENT
         public Task<ServiceResponse<bool>> AddChoicesAsync(long questionId, IEnumerable<QuizDTO.CreateChoiceDto> choices)
             => _repo.AddChoicesAsync(questionId, choices);
 
         public Task<ServiceResponse<IEnumerable<QuizDTO.ChoiceDto>>> GetChoicesByQuestionIdAsync(long questionId)
             => _repo.GetChoicesByQuestionIdAsync(questionId);
+
+        public Task<ServiceResponse<QuizDTO.ChoiceDto>> UpdateChoiceAsync(long choiceId, QuizDTO.UpdateChoiceDto dto, long userId)
+            => _repo.UpdateChoiceAsync(choiceId, dto, userId);
+
+        public Task<ServiceResponse<bool>> DeleteChoiceAsync(long choiceId, long userId)
+            => _repo.DeleteChoiceAsync(choiceId, userId);
 
         // ATTEMPT MANAGEMENT - Delegate to AttemptRepository
         public Task<AttemptResultDto> SubmitAttemptAsync(SubmitAttemptDto dto, long userId)

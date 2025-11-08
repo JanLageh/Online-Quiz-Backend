@@ -114,6 +114,7 @@ namespace OnlineQuiz.Controllers
             return response.Success ? Ok(response) : NotFound(response);
         }
 
+        // ATTEMPT ENDPOINTS 
 
         /// Submit a quiz attempt
         /// POST /api/quiz/{quizId}/submit
