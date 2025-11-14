@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Mvc;
 using OnlineQuiz.DTOs;
 using OnlineQuiz.IServices;
-using OnlineQuiz.Services;
 
 namespace OnlineQuiz.Controllers
 {
@@ -17,15 +16,20 @@ namespace OnlineQuiz.Controllers
         {
             _service = service;
         }
-        [HttpGet]
-        [NonAction]
-        public Task<IActionResult> GetAll() => GetAll(null, null);
 
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] long? instructorId, [FromQuery] string? department)
         {
-            var result = await _service.GetAllCoursesAsync(instructorId, department);
-            return Ok(result);
+            // If no filters provided, call the parameterless method
+            if (!instructorId.HasValue && string.IsNullOrEmpty(department))
+            {
+                var result = await _service.GetAllCoursesAsync();
+                return Ok(result);
+            }
+
+            // Otherwise call the filtered version
+            var filteredResult = await _service.GetAllCoursesAsync(instructorId, department);
+            return Ok(filteredResult);
         }
 
         [HttpGet("{id:long}")]
@@ -78,6 +82,7 @@ namespace OnlineQuiz.Controllers
             var response = await _service.UnenrollStudentAsync(courseId, userId);
             return Ok(response);
         }
+
         [HttpGet("student/{studentId:long}/courses")]
         public async Task<IActionResult> GetCoursesByStudent(long studentId)
         {
