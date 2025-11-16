@@ -11,12 +11,14 @@ using System.Globalization;
 using System.Text;
 using static OnlineQuiz.DTOs.ImportExportDtos;
 using AutoMapper;
+using System.Text.RegularExpressions;
 
 namespace OnlineQuiz.Repository
 {
     public class ImportExportRepository : IImportExportRepository
     {
         private readonly OnlineQuizDbContext _context;
+        private const int MaxFileSize = 10 * 1024 * 1024; // 10MB
 
         public ImportExportRepository(OnlineQuizDbContext context)
         {
@@ -46,90 +48,151 @@ namespace OnlineQuiz.Repository
                     return response;
                 }
 
-                using var stream = new MemoryStream();
-                await file.CopyToAsync(stream);
-                stream.Position = 0;
+                // Validate file size
+                if (file.Length > MaxFileSize)
+                {
+                    response.Success = false;
+                    response.Message = "File size exceeds maximum allowed size (10MB).";
+                    return response;
+                }
+
+                // Validate file name (prevent directory traversal)
+                if (!Regex.IsMatch(file.FileName, @"^[a-zA-Z0-9_\-\.]+$"))
+                {
+                    response.Success = false;
+                    response.Message = "Invalid file name. Only alphanumeric characters, underscores, hyphens, and dots are allowed.";
+                    return response;
+                }
 
                 var students = new List<ImportStudentDto>();
 
-                if (extension == ".csv")
-                {
-                    students = await ParseCsvStudents(stream, errors);
-                }
-                else if (extension == ".xlsx")
-                {
-                    students = ParseExcelStudents(stream, errors);
-                }
-
-                // Import students to database
-                foreach (var student in students)
+                using (var transaction = await _context.Database.BeginTransactionAsync())
                 {
                     try
                     {
-                        // Check if user already exists
-                        var existingUser = await _context.Users
-                            .FirstOrDefaultAsync(u => u.Email == student.Email);
+                        using var stream = new MemoryStream();
+                        await file.CopyToAsync(stream);
+                        stream.Position = 0;
 
-                        if (existingUser != null)
+                        if (extension == ".csv")
                         {
-                            errors.Add($"Email already exists: {student.Email}");
-                            continue;
+                            students = await ParseCsvStudents(stream, errors);
+                        }
+                        else if (extension == ".xlsx")
+                        {
+                            students = await ParseExcelStudentsAsync(stream, errors);
                         }
 
-                        // Check if student number already exists
-                        var existingStudent = await _context.Students
-                            .FirstOrDefaultAsync(s => s.StudentNumber == student.StudentNumber);
+                        // Bulk check for duplicates
+                        var emails = students.Select(s => s.Email).ToList();
+                        var studentNumbers = students.Select(s => s.StudentNumber).ToList();
 
-                        if (existingStudent != null)
+                        var existingEmails = await _context.Users
+                            .Where(u => emails.Contains(u.Email))
+                            .Select(u => u.Email)
+                            .ToListAsync();
+
+                        var existingStudentNumbers = await _context.Students
+                            .Where(s => studentNumbers.Contains(s.StudentNumber))
+                            .Select(s => s.StudentNumber)
+                            .ToListAsync();
+
+                        var usersToAdd = new List<UserModel>();
+                        var studentsToAdd = new List<StudentModel>();
+                        var userRolesToAdd = new List<UserRoleModel>();
+
+                        foreach (var student in students)
                         {
-                            errors.Add($"Student number already exists: {student.StudentNumber}");
-                            continue;
-                        }
-
-                        // Create user
-                        var user = new UserModel
-                        {
-                            Email = student.Email,
-                            FullName = student.FullName,
-                            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Default@123"),
-                            Status = "Active",
-                            CreatedAt = DateTime.UtcNow,
-                            UpdatedAt = DateTime.UtcNow
-                        };
-
-                        _context.Users.Add(user);
-                        await _context.SaveChangesAsync(); // Save to get UserId
-
-                        // Create student
-                        var studentModel = new StudentModel
-                        {
-                            UserId = user.UserId,
-                            StudentNumber = student.StudentNumber
-                        };
-
-                        _context.Students.Add(studentModel);
-
-                        // Assign Student role
-                        var studentRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Student");
-                        if (studentRole != null)
-                        {
-                            _context.UserRoles.Add(new UserRoleModel
+                            try
                             {
-                                UserId = user.UserId,
-                                RoleId = studentRole.RoleId
-                            });
-                        }
-                        response.ImportedCount++;
-                    }
-                    catch (Exception ex) // Only catch non-critical exceptions
-                    {
-                        if (ex is OutOfMemoryException || ex is StackOverflowException || ex is ThreadAbortException)
+                                // Check for duplicates
+                                if (existingEmails.Contains(student.Email))
+                                {
+                                    errors.Add($"Email already exists: {student.Email}");
+                                    continue;
+                                }
 
-                            errors.Add($"Error importing {student.Email}: {ex.Message}");
+                                if (existingStudentNumbers.Contains(student.StudentNumber))
+                                {
+                                    errors.Add($"Student number already exists: {student.StudentNumber}");
+                                    continue;
+                                }
+
+                                // Create user with secure password
+                                var password = GenerateSecurePassword();
+                                var user = new UserModel
+                                {
+                                    Email = student.Email,
+                                    FullName = student.FullName,
+                                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+                                    Status = "Active",
+                                    CreatedAt = DateTime.UtcNow,
+                                    UpdatedAt = DateTime.UtcNow
+                                };
+
+                                usersToAdd.Add(user);
+
+                                // Create student
+                                studentsToAdd.Add(new StudentModel
+                                {
+                                    UserId = user.UserId, // Will be set after save
+                                    StudentNumber = student.StudentNumber
+                                });
+
+                                // Assign Student role
+                                var studentRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "Student");
+                                if (studentRole != null)
+                                {
+                                    userRolesToAdd.Add(new UserRoleModel
+                                    {
+                                        UserId = user.UserId,
+                                        RoleId = studentRole.RoleId
+                                    });
+                                }
+                            }
+                            catch (DbUpdateException ex)
+                            {
+                                errors.Add($"Database error for {student.Email}: {ex.InnerException?.Message}");
+                            }
+                            catch (FormatException ex)
+                            {
+                                errors.Add($"Format error for {student.Email}: {ex.Message}");
+                            }
+                            catch (Exception ex)
+                            {
+                                errors.Add($"Error processing {student.Email}: {ex.Message}");
+                            }
+                        }
+
+                        // Batch save
+                        if (usersToAdd.Any())
+                        {
+                            await _context.Users.AddRangeAsync(usersToAdd);
+                            await _context.SaveChangesAsync();
+
+                            // Update IDs for related entities
+                            for (int i = 0; i < usersToAdd.Count; i++)
+                            {
+                                var user = usersToAdd[i];
+                                studentsToAdd[i].UserId = user.UserId;
+                                userRolesToAdd[i].UserId = user.UserId;
+                            }
+
+                            await _context.Students.AddRangeAsync(studentsToAdd);
+                            await _context.UserRoles.AddRangeAsync(userRolesToAdd);
+                            await _context.SaveChangesAsync();
+
+                            response.ImportedCount = usersToAdd.Count;
+                        }
+
+                        await transaction.CommitAsync();
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
                     }
                 }
-
-                await _context.SaveChangesAsync();
 
                 response.Success = true;
                 response.ErrorCount = errors.Count;
@@ -137,7 +200,6 @@ namespace OnlineQuiz.Repository
                 response.Message = $"Successfully imported {response.ImportedCount} students. {errors.Count} errors.";
 
                 await LogOperationAsync("Import", "Students", file.FileName, userId);
-
                 return response;
             }
             catch (Exception ex)
@@ -147,7 +209,6 @@ namespace OnlineQuiz.Repository
                 response.Errors = errors;
 
                 await LogOperationAsync("Import", "Students", file.FileName, userId);
-
                 return response;
             }
         }
@@ -175,6 +236,14 @@ namespace OnlineQuiz.Repository
                     return response;
                 }
 
+                // Validate file size
+                if (file.Length > MaxFileSize)
+                {
+                    response.Success = false;
+                    response.Message = "File size exceeds maximum allowed size (10MB).";
+                    return response;
+                }
+
                 // Validate quiz exists
                 var quiz = await _context.Quizzes
                     .Include(q => q.Questions)
@@ -187,45 +256,79 @@ namespace OnlineQuiz.Repository
                     return response;
                 }
 
-                using var stream = new MemoryStream();
-                await file.CopyToAsync(stream);
-                stream.Position = 0;
-
-                var questions = new List<ImportQuestionDto>();
-
-                if (extension == ".csv")
-                {
-                    questions = await ParseCsvQuestions(stream, errors);
-                }
-                else if (extension == ".xlsx")
-                {
-                    questions = ParseExcelQuestions(stream, errors);
-                }
-
-                // Import questions to database
-                foreach (var question in questions)
+                using (var transaction = await _context.Database.BeginTransactionAsync())
                 {
                     try
                     {
-                        var questionModel = new QuestionModel
-                        {
-                            QuizId = quizId,
-                            Body = question.Body,
-                            Type = question.Type,
-                            Points = question.Points,
-                            SortOrder = question.SortOrder
-                        };
+                        using var stream = new MemoryStream();
+                        await file.CopyToAsync(stream);
+                        stream.Position = 0;
 
-                        _context.Questions.Add(questionModel);
-                        response.ImportedCount++;
+                        var questions = new List<ImportQuestionDto>();
+
+                        if (extension == ".csv")
+                        {
+                            questions = await ParseCsvQuestions(stream, errors);
+                        }
+                        else if (extension == ".xlsx")
+                        {
+                            questions = await ParseExcelQuestionsAsync(stream, errors);
+                        }
+
+                        // Validate question numbers don't conflict with existing questions
+                        var existingQuestionNumbers = await _context.Questions
+                            .Where(q => q.QuizId == quizId)
+                            .Select(q => q.SortOrder)
+                            .ToListAsync();
+
+                        var questionsToAdd = new List<QuestionModel>();
+
+                        foreach (var question in questions)
+                        {
+                            try
+                            {
+                                // Check if question number already exists for this quiz
+                                if (existingQuestionNumbers.Contains(question.SortOrder))
+                                {
+                                    errors.Add($"Question with Sort Order {question.SortOrder} already exists in this quiz.");
+                                    continue;
+                                }
+
+                                questionsToAdd.Add(new QuestionModel
+                                {
+                                    QuizId = quizId,
+                                    Body = question.Body,
+                                    Type = question.Type,
+                                    Points = question.Points,
+                                    SortOrder = question.SortOrder
+                                });
+                            }
+                            catch (DbUpdateException ex)
+                            {
+                                errors.Add($"Database error for question: {ex.InnerException?.Message}");
+                            }
+                            catch (Exception ex)
+                            {
+                                errors.Add($"Error processing question: {ex.Message}");
+                            }
+                        }
+
+                        // Batch save
+                        if (questionsToAdd.Any())
+                        {
+                            await _context.Questions.AddRangeAsync(questionsToAdd);
+                            await _context.SaveChangesAsync();
+                            response.ImportedCount = questionsToAdd.Count;
+                        }
+
+                        await transaction.CommitAsync();
                     }
-                    catch (Exception ex)
+                    catch
                     {
-                        errors.Add($"Error importing question: {ex.Message}");
+                        await transaction.RollbackAsync();
+                        throw;
                     }
                 }
-
-                await _context.SaveChangesAsync();
 
                 response.Success = true;
                 response.ErrorCount = errors.Count;
@@ -233,7 +336,6 @@ namespace OnlineQuiz.Repository
                 response.Message = $"Successfully imported {response.ImportedCount} questions. {errors.Count} errors.";
 
                 await LogOperationAsync("Import", "Questions", file.FileName, userId);
-
                 return response;
             }
             catch (Exception ex)
@@ -243,7 +345,6 @@ namespace OnlineQuiz.Repository
                 response.Errors = errors;
 
                 await LogOperationAsync("Import", "Questions", file.FileName, userId);
-
                 return response;
             }
         }
@@ -329,12 +430,17 @@ namespace OnlineQuiz.Repository
             catch (Exception ex)
             {
                 errors.Add($"CSV parsing error: {ex.Message}");
+                // More specific error handling
+                if (ex is IOException)
+                    errors.Add("File access error. Please ensure the file is not open by another program.");
+                else if (ex is InvalidDataException)
+                    errors.Add("Invalid CSV format. Please ensure the file is not corrupted.");
             }
 
             return students;
         }
 
-        private List<ImportStudentDto> ParseExcelStudents(Stream stream, List<string> errors)
+        private async Task<List<ImportStudentDto>> ParseExcelStudentsAsync(Stream stream, List<string> errors)
         {
             var students = new List<ImportStudentDto>();
 
@@ -344,31 +450,36 @@ namespace OnlineQuiz.Repository
                 var ws = workbook.Worksheets.First();
                 var rows = ws.RowsUsed().Skip(1); // Skip header
 
-                students = rows
-                    .Select(row => new ImportStudentDto
+                foreach (var row in rows)
+                {
+                    try
                     {
-                        FullName = row.Cell(1).GetString(),
-                        Email = row.Cell(2).GetString(),
-                        StudentNumber = row.Cell(3).GetString()
-                    })
-                    .Where(student => ValidateStudent(student, errors))
-                    .ToList();
+                        var student = new ImportStudentDto
+                        {
+                            FullName = row.Cell(1).GetValue<string>(),
+                            Email = row.Cell(2).GetValue<string>(),
+                            StudentNumber = row.Cell(3).GetValue<string>()
+                        };
+
+                        if (ValidateStudent(student, errors))
+                        {
+                            students.Add(student);
+                        }
+                    }
+                    catch (Exception rowEx)
+                    {
+                        errors.Add($"Error processing row {row.RowNumber()}: {rowEx.Message}");
+                    }
+                }
             }
-            catch (FormatException ex)
+            catch (Exception ex)
             {
                 errors.Add($"Excel parsing error: {ex.Message}");
-            }
-            catch (IOException ex)
-            {
-                errors.Add($"Excel parsing error: {ex.Message}");
-            }
-            catch (InvalidDataException ex)
-            {
-                errors.Add($"Excel parsing error: {ex.Message}");
-            }
-            catch (ArgumentException ex)
-            {
-                errors.Add($"Excel parsing error: {ex.Message}");
+                // More specific error handling
+                if (ex is IOException)
+                    errors.Add("File access error. Please ensure the file is not open by another program.");
+                else if (ex is InvalidDataException)
+                    errors.Add("Invalid Excel format. Please ensure the file is not corrupted.");
             }
 
             return students;
@@ -406,7 +517,7 @@ namespace OnlineQuiz.Repository
             return questions;
         }
 
-        private List<ImportQuestionDto> ParseExcelQuestions(Stream stream, List<string> errors)
+        private async Task<List<ImportQuestionDto>> ParseExcelQuestionsAsync(Stream stream, List<string> errors)
         {
             var questions = new List<ImportQuestionDto>();
 
@@ -416,16 +527,28 @@ namespace OnlineQuiz.Repository
                 var ws = workbook.Worksheets.First();
                 var rows = ws.RowsUsed().Skip(1); // Skip header
 
-                questions = rows
-                    .Select(row => new ImportQuestionDto
+                foreach (var row in rows)
+                {
+                    try
                     {
-                        Body = row.Cell(1).GetString(),
-                        Type = row.Cell(2).GetString() ?? "Single",
-                        Points = row.Cell(3).TryGetValue(out decimal points) ? points : 1,
-                        SortOrder = row.Cell(4).TryGetValue(out int sortOrder) ? sortOrder : 1
-                    })
-                    .Where(question => ValidateQuestion(question, errors))
-                    .ToList();
+                        var question = new ImportQuestionDto
+                        {
+                            Body = row.Cell(1).GetValue<string>(),
+                            Type = row.Cell(2).GetValue<string>() ?? "Single",
+                            Points = row.Cell(3).TryGetValue(out decimal points) ? points : 1,
+                            SortOrder = row.Cell(4).TryGetValue(out int sortOrder) ? sortOrder : 1
+                        };
+
+                        if (ValidateQuestion(question, errors))
+                        {
+                            questions.Add(question);
+                        }
+                    }
+                    catch (Exception rowEx)
+                    {
+                        errors.Add($"Error processing row {row.RowNumber()}: {rowEx.Message}");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -458,11 +581,18 @@ namespace OnlineQuiz.Repository
             return true;
         }
 
-        private bool ValidateQuestion(ImportQuestionDto question, List<string> errors)
+        private bool ValidateQuestion(ImportQuestionDto question, List<string> errors, int? rowNumber = null)
         {
             if (string.IsNullOrWhiteSpace(question.Body))
             {
-                errors.Add("Question body is required.");
+                if (rowNumber.HasValue)
+                {
+                    errors.Add($"Row {rowNumber.Value}: Question body is required.");
+                }
+                else
+                {
+                    errors.Add("Question body is required.");
+                }
                 return false;
             }
 
@@ -481,7 +611,6 @@ namespace OnlineQuiz.Repository
 
             return true;
         }
-
 
         private bool IsValidEmail(string email)
         {
@@ -537,6 +666,18 @@ namespace OnlineQuiz.Repository
                 // Log operation should not break the main flow
                 Console.Error.WriteLine($"[LogOperationAsync] Logging failed: {ex}");
             }
+        }
+
+        private string GenerateSecurePassword()
+        {
+            const string validChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*";
+            var random = new Random();
+            var password = new StringBuilder();
+            for (int i = 0; i < 12; i++)
+            {
+                password.Append(validChars[random.Next(validChars.Length)]);
+            }
+            return password.ToString();
         }
     }
 }
