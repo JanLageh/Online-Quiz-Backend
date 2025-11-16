@@ -53,15 +53,19 @@ namespace OnlineQuiz.Controllers
                 var summary = await _service.GetNotificationSummaryAsync(userId);
                 return Ok(summary);
             }
-            catch (Exception ex)
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
             {
                 return BadRequest(new { message = ex.Message });
             }
         }
 
-        /// Create a notification (Admin/Teacher only)
-        /// POST /api/notification
-        [HttpPost]
+            /// Create a notification (Admin/Teacher only)
+            /// POST /api/notification
+            [HttpPost]
         public async Task<IActionResult> CreateNotification([FromBody] CreateNotificationDto dto)
         {
             try

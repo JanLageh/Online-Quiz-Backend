@@ -582,6 +582,16 @@ namespace OnlineQuiz.Repository
                 return response;
             }
 
+            // Ensure at least one choice remains for the question
+            var totalChoicesCount = await _context.Choices
+                .Where(c => c.QuestionId == choice.QuestionId)
+                .CountAsync();
+            if (totalChoicesCount <= 1)
+            {
+                response.Success = false;
+                response.Message = "Cannot delete the only choice. At least one choice must remain for the question.";
+                return response;
+            }
             _context.Choices.Remove(choice);
             await _context.SaveChangesAsync();
 

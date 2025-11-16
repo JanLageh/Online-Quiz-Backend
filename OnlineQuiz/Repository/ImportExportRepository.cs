@@ -121,9 +121,11 @@ namespace OnlineQuiz.Repository
                         }
                         response.ImportedCount++;
                     }
-                    catch (Exception ex)
+                    catch (Exception ex) // Only catch non-critical exceptions
                     {
-                        errors.Add($"Error importing {student.Email}: {ex.Message}");
+                        if (ex is OutOfMemoryException || ex is StackOverflowException || ex is ThreadAbortException)
+
+                            errors.Add($"Error importing {student.Email}: {ex.Message}");
                     }
                 }
 
@@ -342,22 +344,29 @@ namespace OnlineQuiz.Repository
                 var ws = workbook.Worksheets.First();
                 var rows = ws.RowsUsed().Skip(1); // Skip header
 
-                foreach (var row in rows)
-                {
-                    var student = new ImportStudentDto
+                students = rows
+                    .Select(row => new ImportStudentDto
                     {
                         FullName = row.Cell(1).GetString(),
                         Email = row.Cell(2).GetString(),
                         StudentNumber = row.Cell(3).GetString()
-                    };
-
-                    if (ValidateStudent(student, errors))
-                    {
-                        students.Add(student);
-                    }
-                }
+                    })
+                    .Where(student => ValidateStudent(student, errors))
+                    .ToList();
             }
-            catch (Exception ex)
+            catch (FormatException ex)
+            {
+                errors.Add($"Excel parsing error: {ex.Message}");
+            }
+            catch (IOException ex)
+            {
+                errors.Add($"Excel parsing error: {ex.Message}");
+            }
+            catch (InvalidDataException ex)
+            {
+                errors.Add($"Excel parsing error: {ex.Message}");
+            }
+            catch (ArgumentException ex)
             {
                 errors.Add($"Excel parsing error: {ex.Message}");
             }
@@ -407,21 +416,16 @@ namespace OnlineQuiz.Repository
                 var ws = workbook.Worksheets.First();
                 var rows = ws.RowsUsed().Skip(1); // Skip header
 
-                foreach (var row in rows)
-                {
-                    var question = new ImportQuestionDto
+                questions = rows
+                    .Select(row => new ImportQuestionDto
                     {
                         Body = row.Cell(1).GetString(),
                         Type = row.Cell(2).GetString() ?? "Single",
                         Points = row.Cell(3).TryGetValue(out decimal points) ? points : 1,
                         SortOrder = row.Cell(4).TryGetValue(out int sortOrder) ? sortOrder : 1
-                    };
-
-                    if (ValidateQuestion(question, errors))
-                    {
-                        questions.Add(question);
-                    }
-                }
+                    })
+                    .Where(question => ValidateQuestion(question, errors))
+                    .ToList();
             }
             catch (Exception ex)
             {
@@ -454,18 +458,11 @@ namespace OnlineQuiz.Repository
             return true;
         }
 
-        private bool ValidateQuestion(ImportQuestionDto question, List<string> errors, int? rowNumber = null)
+        private bool ValidateQuestion(ImportQuestionDto question, List<string> errors)
         {
             if (string.IsNullOrWhiteSpace(question.Body))
             {
-                if (rowNumber.HasValue)
-                {
-                    errors.Add($"Row {rowNumber.Value}: Question body is required.");
-                }
-                else
-                {
-                    errors.Add("Question body is required.");
-                }
+                errors.Add("Question body is required.");
                 return false;
             }
 
@@ -493,7 +490,7 @@ namespace OnlineQuiz.Repository
                 var addr = new System.Net.Mail.MailAddress(email);
                 return addr.Address == email;
             }
-            catch
+            catch (Exception)
             {
                 return false;
             }
@@ -523,8 +520,6 @@ namespace OnlineQuiz.Repository
         {
             try
             {
-                if (userId == null)
-                    throw new InvalidOperationException("User ID is required for logging operations");
                 var log = new ExportImportLogModel
                 {
                     UserId = userId ?? 1, // Default to system user if not provided
@@ -537,9 +532,10 @@ namespace OnlineQuiz.Repository
                 _context.ExportImportLogs.Add(log);
                 await _context.SaveChangesAsync();
             }
-            catch
+            catch (Exception ex)
             {
                 // Log operation should not break the main flow
+                Console.Error.WriteLine($"[LogOperationAsync] Logging failed: {ex}");
             }
         }
     }

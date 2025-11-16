@@ -1,5 +1,4 @@
-﻿using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using OnlineQuiz.Data;
 using OnlineQuiz.DTOs;
 using OnlineQuiz.IRepository;
@@ -92,18 +91,17 @@ namespace OnlineQuiz.Repository
                     earnedPoints = isCorrect ? question.Points : 0;
 
                     // Save each selected choice as an answer
-                    foreach (var choiceId in selectedChoiceIds)
-                    {
-                        var attemptAnswer = new AttemptAnswerModel
+                    selectedChoiceIds
+                        .Select(choiceId => new AttemptAnswerModel
                         {
                             AttemptId = attempt.AttemptId,
                             QuestionId = question.QuestionId,
                             ChoiceId = choiceId,
                             IsCorrect = isCorrect,
                             FreeText = null
-                        };
-                        _context.AttemptAnswers.Add(attemptAnswer);
-                    }
+                        })
+                        .ToList()
+                        .ForEach(attemptAnswer => _context.AttemptAnswers.Add(attemptAnswer));
                 }
 
                 totalScore += earnedPoints;
@@ -210,11 +208,11 @@ namespace OnlineQuiz.Repository
                 var question = aa.Question;
                 decimal pointsEarned = 0;
 
-                if (aa.IsCorrect == true)
+                if (aa.IsCorrect is true)
                 {
                     // For multiple choice, divide points among all correct selections
                     var totalCorrectSelections = attempt.AttemptAnswers
-                        .Count(a => a.QuestionId == aa.QuestionId && a.IsCorrect == true);
+                        .Count(a => a.QuestionId == aa.QuestionId && a.IsCorrect is true);
 
                     //if (totalCorrectSelections > 0)
                     //    pointsEarned = question.Points / totalCorrectSelections;
