@@ -35,8 +35,8 @@ namespace OnlineQuiz.Tests.Controllers
 
             var controller = CreateController(mockService);
 
-            // Act
-            var result = await controller.GetAll();
+            // Act - Call with null parameters to invoke the parameterless service method
+            var result = await controller.GetAll(null, null);
 
             // Assert
             var ok = Assert.IsType<OkObjectResult>(result);
@@ -46,6 +46,32 @@ namespace OnlineQuiz.Tests.Controllers
             Assert.Equal(2, payload.Data!.Count());
             Assert.Contains(payload.Data!, c => c.Code == "CS101" && c.Name == "Intro CS");
             Assert.Contains(payload.Data!, c => c.Code == "CS102" && c.Name == "Data Structures");
+        }
+
+        [Fact]
+        public async Task GetAll_WithFilters_ReturnsOk_WithFilteredServiceResponse()
+        {
+            // Arrange
+            var mockService = new Mock<ICourseService>();
+            var expectedCourses = new List<CourseDTO.CourseDto>
+            {
+                new CourseDTO.CourseDto { CourseId = 1, Code = "CS101", Name = "Intro CS", InstructorUserId = 10, InstructorName = "Prof. A" }
+            };
+            var expectedResponse = new ServiceResponse<IEnumerable<CourseDTO.CourseDto>>(expectedCourses);
+            mockService.Setup(s => s.GetAllCoursesAsync(10, "Computer Science")).ReturnsAsync(expectedResponse);
+
+            var controller = CreateController(mockService);
+
+            // Act - Call with filter parameters
+            var result = await controller.GetAll(10, "Computer Science");
+
+            // Assert
+            var ok = Assert.IsType<OkObjectResult>(result);
+            var payload = Assert.IsType<ServiceResponse<IEnumerable<CourseDTO.CourseDto>>>(ok.Value);
+            Assert.True(payload.Success);
+            Assert.NotNull(payload.Data);
+            Assert.Single(payload.Data!);
+            Assert.Contains(payload.Data!, c => c.Code == "CS101" && c.InstructorUserId == 10);
         }
 
         [Fact]
@@ -171,9 +197,11 @@ namespace OnlineQuiz.Tests.Controllers
         {
             var type = typeof(CourseController);
 
-            var getAll = type.GetMethod("GetAll");
-            var getAllAttr = Assert.Single(getAll!.GetCustomAttributes(typeof(HttpGetAttribute), inherit: true));
-            Assert.IsType<HttpGetAttribute>(getAllAttr);
+            var getAll = type.GetMethod("GetAll", new[] { typeof(long?), typeof(string) });
+            Assert.NotNull(getAll);
+            var getAllAttrs = getAll!.GetCustomAttributes(typeof(HttpGetAttribute), inherit: true);
+            Assert.NotEmpty(getAllAttrs);
+            Assert.Contains(getAllAttrs, attr => attr is HttpGetAttribute);
 
             var getById = type.GetMethod("GetById");
             var getByIdAttr = Assert.Single(getById!.GetCustomAttributes(typeof(HttpGetAttribute), inherit: true));

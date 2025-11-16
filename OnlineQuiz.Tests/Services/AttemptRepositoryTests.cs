@@ -483,7 +483,8 @@ namespace OnlineQuiz.Tests.Repository
             Assert.Equal(3, detail.Answers.Count); // 1 for single, 2 for multiple
 
             // Single choice answer should get full 10 points
-            var singleAnswer = detail.Answers.First(a => a.QuestionId == 1);
+            var singleAnswer = detail.Answers.FirstOrDefault(a => a.QuestionId == 1);
+            Assert.NotNull(singleAnswer);
             Assert.Equal(10, singleAnswer.PointsEarned);
 
             // Multiple choice answers should split 15 points (7.5 each)
