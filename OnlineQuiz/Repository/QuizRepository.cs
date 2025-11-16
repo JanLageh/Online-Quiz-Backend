@@ -390,42 +390,6 @@ namespace OnlineQuiz.Repository
                         IsCorrect = c.IsCorrect
                     });
                 }
-                //// Efficiently update, remove, and add choices
-                //var existingChoices = question.Choices.ToList();
-                //var dtoChoices = dto.Choices.ToList();
-                //// Build lookup for DTO choices by ID (if present)
-                //var dtoChoicesById = dtoChoices
-                //    .Where(c => c.Id != 0)
-                //    .ToDictionary(c => c.Id, c => c);
-                //// 1. Update existing choices and remove those not in DTO
-                //foreach (var existingChoice in existingChoices)
-                //{
-                //    if (dtoChoicesById.TryGetValue(existingChoice.ChoiceId, out var dtoChoice))
-                //    {
-                //        // Update properties
-                //        existingChoice.Body = dtoChoice.Text;
-                //        existingChoice.IsCorrect = dtoChoice.IsCorrect;
-                //    }
-                //    else
-                //    {
-                //        // Remove choice not present in DTO
-                //        _context.Choices.Remove(existingChoice);
-                //    }
-                //}
-                //// 2. Add new choices (those in DTO with Id == 0)
-                //var existingChoiceIds = existingChoices.Select(c => c.ChoiceId).ToHashSet();
-                //foreach (var dtoChoice in dtoChoices)
-                //{
-                //    if (dtoChoice.Id == 0 || !existingChoiceIds.Contains(dtoChoice.Id))
-                //    {
-                //        _context.Choices.Add(new ChoiceModel
-                //        {
-                //            QuestionId = question.QuestionId,
-                //            Body = dtoChoice.Text,
-                //            IsCorrect = dtoChoice.IsCorrect
-                //        });
-                //    }
-                //}
             }
 
             await _context.SaveChangesAsync();
