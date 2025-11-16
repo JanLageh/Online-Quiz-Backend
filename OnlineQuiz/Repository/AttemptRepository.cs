@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.EntityFrameworkCore;
 using OnlineQuiz.Data;
 using OnlineQuiz.DTOs;
 using OnlineQuiz.IRepository;
@@ -215,10 +216,13 @@ namespace OnlineQuiz.Repository
                     var totalCorrectSelections = attempt.AttemptAnswers
                         .Count(a => a.QuestionId == aa.QuestionId && a.IsCorrect == true);
 
-                    if (totalCorrectSelections > 0)
-                        pointsEarned = question.Points / totalCorrectSelections;
-                    else
-                        pointsEarned = question.Points;
+                    //if (totalCorrectSelections > 0)
+                    //    pointsEarned = question.Points / totalCorrectSelections;
+                    //else
+                    //    pointsEarned = question.Points;
+                    pointsEarned = totalCorrectSelections > 0
+                        ? question.Points / totalCorrectSelections
+                        : question.Points;
                 }
 
                 answers.Add(new AttemptAnswerDetailDto

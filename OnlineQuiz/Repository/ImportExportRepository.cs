@@ -454,11 +454,18 @@ namespace OnlineQuiz.Repository
             return true;
         }
 
-        private bool ValidateQuestion(ImportQuestionDto question, List<string> errors)
+        private bool ValidateQuestion(ImportQuestionDto question, List<string> errors, int? rowNumber = null)
         {
             if (string.IsNullOrWhiteSpace(question.Body))
             {
-                errors.Add("Question body is required.");
+                if (rowNumber.HasValue)
+                {
+                    errors.Add($"Row {rowNumber.Value}: Question body is required.");
+                }
+                else
+                {
+                    errors.Add("Question body is required.");
+                }
                 return false;
             }
 
@@ -477,6 +484,7 @@ namespace OnlineQuiz.Repository
 
             return true;
         }
+
 
         private bool IsValidEmail(string email)
         {
@@ -515,6 +523,8 @@ namespace OnlineQuiz.Repository
         {
             try
             {
+                if (userId == null)
+                    throw new InvalidOperationException("User ID is required for logging operations");
                 var log = new ExportImportLogModel
                 {
                     UserId = userId ?? 1, // Default to system user if not provided
